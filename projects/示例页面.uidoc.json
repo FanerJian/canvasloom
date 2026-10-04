@@ -1,0 +1,893 @@
+{
+  "format": "uidoc",
+  "version": 1,
+  "revision": 11,
+  "name": "示例页面",
+  "canvas": {
+    "width": 1280,
+    "height": 800,
+    "background": "#e5e7eb"
+  },
+  "resources": {
+    "logo_svg": {
+      "kind": "image",
+      "name": "logo.svg",
+      "dataUrl": "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='48'%3E%3Crect width='48' height='48' rx='10' fill='%232563eb'/%3E%3Cpath d='M14 30 L24 14 L34 30 Z' fill='white'/%3E%3C/svg%3E"
+    }
+  },
+  "components": {
+    "root": {
+      "type": "container",
+      "name": "页面",
+      "purpose": "页面根容器：上方主体区域（左侧导航＋右侧内容），底部操作区",
+      "parent": null,
+      "children": [
+        "main_area",
+        "footer"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 0,
+        "padding": 0,
+        "justify": "start",
+        "align": "stretch"
+      },
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 1280
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 800
+        }
+      },
+      "style": {
+        "background": "#ffffff"
+      },
+      "id": "root"
+    },
+    "main_area": {
+      "id": "main_area",
+      "type": "container",
+      "name": "主体区域",
+      "purpose": "横向分为左侧导航与右侧内容",
+      "parent": "root",
+      "children": [
+        "sidebar",
+        "content"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 0,
+        "padding": 0,
+        "justify": "start",
+        "align": "stretch"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fill"
+        }
+      },
+      "style": {
+        "background": "#ffffff"
+      }
+    },
+    "sidebar": {
+      "id": "sidebar",
+      "type": "container",
+      "name": "左侧导航",
+      "purpose": "应用品牌与主导航入口",
+      "parent": "main_area",
+      "children": [
+        "brand_row",
+        "divider_side",
+        "nav_item_1",
+        "nav_item_2",
+        "nav_item_3"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 12,
+        "padding": 16,
+        "justify": "start",
+        "align": "stretch"
+      },
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 220
+        },
+        "height": {
+          "mode": "fill"
+        }
+      },
+      "style": {
+        "background": "#1f2937"
+      }
+    },
+    "brand_row": {
+      "id": "brand_row",
+      "type": "container",
+      "name": "品牌行",
+      "purpose": "logo 与应用名横向排列",
+      "parent": "sidebar",
+      "children": [
+        "logo",
+        "app_title"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 8,
+        "padding": 0,
+        "justify": "start",
+        "align": "center"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {}
+    },
+    "logo": {
+      "id": "logo",
+      "type": "image",
+      "name": "应用图标",
+      "purpose": "应用 logo",
+      "parent": "brand_row",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 32
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 32
+        }
+      },
+      "style": {},
+      "resourceId": "logo_svg",
+      "fit": "contain"
+    },
+    "app_title": {
+      "id": "app_title",
+      "type": "text",
+      "name": "应用名称",
+      "parent": "brand_row",
+      "text": "界面工坊",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#f9fafb",
+        "fontSize": 16,
+        "fontWeight": "bold"
+      }
+    },
+    "divider_side": {
+      "id": "divider_side",
+      "type": "divider",
+      "name": "导航分割线",
+      "parent": "sidebar",
+      "orientation": "horizontal",
+      "thickness": 1,
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#374151"
+      }
+    },
+    "nav_item_1": {
+      "type": "text",
+      "name": "导航-总览",
+      "purpose": "导航项：当前所在页",
+      "parent": "sidebar",
+      "text": "总览",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#f9fafb",
+        "fontSize": 14,
+        "fontWeight": "medium"
+      },
+      "id": "nav_item_1"
+    },
+    "nav_item_2": {
+      "id": "nav_item_2",
+      "type": "text",
+      "name": "导航-数据报表",
+      "parent": "sidebar",
+      "text": "数据报表",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#9ca3af",
+        "fontSize": 14
+      }
+    },
+    "nav_item_3": {
+      "id": "nav_item_3",
+      "type": "text",
+      "name": "导航-系统设置",
+      "parent": "sidebar",
+      "text": "系统设置",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#9ca3af",
+        "fontSize": 14
+      }
+    },
+    "content": {
+      "id": "content",
+      "type": "container",
+      "name": "内容区",
+      "purpose": "页面主内容：标题、指标卡与设置表单",
+      "parent": "main_area",
+      "children": [
+        "page_title",
+        "title_accent",
+        "stats_row",
+        "form"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 16,
+        "padding": 24,
+        "justify": "start",
+        "align": "stretch"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fill"
+        }
+      },
+      "style": {
+        "background": "#f9fafb"
+      }
+    },
+    "page_title": {
+      "id": "page_title",
+      "type": "text",
+      "name": "页面标题",
+      "parent": "content",
+      "text": "用户设置",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#111827",
+        "fontSize": 22,
+        "fontWeight": "bold"
+      }
+    },
+    "title_accent": {
+      "id": "title_accent",
+      "type": "rect",
+      "name": "标题装饰条",
+      "parent": "content",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 48
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 4
+        }
+      },
+      "style": {
+        "background": "#2563eb",
+        "borderRadius": 2
+      }
+    },
+    "stats_row": {
+      "id": "stats_row",
+      "type": "container",
+      "name": "指标卡片区",
+      "purpose": "网格布局示例：三列关键指标卡",
+      "parent": "content",
+      "children": [
+        "card_users",
+        "card_orders",
+        "card_revenue"
+      ],
+      "layout": {
+        "mode": "grid",
+        "padding": 0,
+        "columnGap": 12,
+        "rowGap": 12,
+        "tracks": {
+          "columns": [
+            {
+              "mode": "fill",
+              "value": 1
+            },
+            {
+              "mode": "fill",
+              "value": 1
+            },
+            {
+              "mode": "fill",
+              "value": 1
+            }
+          ],
+          "rows": [
+            {
+              "mode": "fixed",
+              "value": 88
+            }
+          ]
+        }
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {}
+    },
+    "card_users": {
+      "id": "card_users",
+      "type": "container",
+      "name": "指标卡-用户",
+      "parent": "stats_row",
+      "children": [
+        "stat_users_text"
+      ],
+      "area": {
+        "col": 1,
+        "row": 1,
+        "colSpan": 1,
+        "rowSpan": 1
+      },
+      "layout": {
+        "mode": "vertical",
+        "gap": 4,
+        "padding": 8,
+        "justify": "center",
+        "align": "center"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fill"
+        }
+      },
+      "style": {
+        "background": "#ffffff",
+        "borderRadius": 8,
+        "borderWidth": 1,
+        "borderColor": "#e5e7eb"
+      }
+    },
+    "stat_users_text": {
+      "id": "stat_users_text",
+      "type": "text",
+      "name": "用户数",
+      "parent": "card_users",
+      "text": "1,284 位用户",
+      "size": {
+        "width": {
+          "mode": "auto"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#111827",
+        "fontSize": 15,
+        "fontWeight": "medium"
+      }
+    },
+    "card_orders": {
+      "id": "card_orders",
+      "type": "container",
+      "name": "指标卡-订单",
+      "parent": "stats_row",
+      "children": [
+        "stat_orders_text"
+      ],
+      "area": {
+        "col": 2,
+        "row": 1,
+        "colSpan": 1,
+        "rowSpan": 1
+      },
+      "layout": {
+        "mode": "vertical",
+        "gap": 4,
+        "padding": 8,
+        "justify": "center",
+        "align": "center"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fill"
+        }
+      },
+      "style": {
+        "background": "#ffffff",
+        "borderRadius": 8,
+        "borderWidth": 1,
+        "borderColor": "#e5e7eb"
+      }
+    },
+    "stat_orders_text": {
+      "id": "stat_orders_text",
+      "type": "text",
+      "name": "订单数",
+      "parent": "card_orders",
+      "text": "356 笔订单",
+      "size": {
+        "width": {
+          "mode": "auto"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#111827",
+        "fontSize": 15,
+        "fontWeight": "medium"
+      }
+    },
+    "card_revenue": {
+      "id": "card_revenue",
+      "type": "container",
+      "name": "指标卡-收入",
+      "parent": "stats_row",
+      "children": [
+        "stat_revenue_text"
+      ],
+      "area": {
+        "col": 3,
+        "row": 1,
+        "colSpan": 1,
+        "rowSpan": 1
+      },
+      "layout": {
+        "mode": "vertical",
+        "gap": 4,
+        "padding": 8,
+        "justify": "center",
+        "align": "center"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fill"
+        }
+      },
+      "style": {
+        "background": "#ffffff",
+        "borderRadius": 8,
+        "borderWidth": 1,
+        "borderColor": "#e5e7eb"
+      }
+    },
+    "stat_revenue_text": {
+      "id": "stat_revenue_text",
+      "type": "text",
+      "name": "收入",
+      "parent": "card_revenue",
+      "text": "¥92,400 今日收入",
+      "size": {
+        "width": {
+          "mode": "auto"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#111827",
+        "fontSize": 15,
+        "fontWeight": "medium"
+      }
+    },
+    "form": {
+      "id": "form",
+      "type": "container",
+      "name": "设置表单",
+      "purpose": "纵向排列的表单字段行",
+      "parent": "content",
+      "children": [
+        "field_name",
+        "field_email",
+        "field_bio"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 12,
+        "padding": 0,
+        "justify": "start",
+        "align": "stretch"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {}
+    },
+    "field_name": {
+      "id": "field_name",
+      "type": "container",
+      "name": "字段行-用户名",
+      "parent": "form",
+      "children": [
+        "label_name",
+        "input_name"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 8,
+        "padding": 0,
+        "justify": "start",
+        "align": "center"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {}
+    },
+    "label_name": {
+      "id": "label_name",
+      "type": "text",
+      "name": "标签-用户名",
+      "parent": "field_name",
+      "text": "用户名",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 80
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#374151",
+        "fontSize": 14
+      }
+    },
+    "input_name": {
+      "id": "input_name",
+      "type": "input",
+      "name": "输入框-用户名",
+      "parent": "field_name",
+      "placeholder": "请输入用户名",
+      "value": "",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#ffffff",
+        "color": "#1f2937",
+        "fontSize": 14,
+        "borderRadius": 6,
+        "borderWidth": 1,
+        "borderColor": "#d1d5db",
+        "padding": [
+          8,
+          12,
+          8,
+          12
+        ]
+      }
+    },
+    "field_email": {
+      "id": "field_email",
+      "type": "container",
+      "name": "字段行-邮箱",
+      "parent": "form",
+      "children": [
+        "label_email",
+        "input_email"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 8,
+        "padding": 0,
+        "justify": "start",
+        "align": "center"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {}
+    },
+    "label_email": {
+      "id": "label_email",
+      "type": "text",
+      "name": "标签-邮箱",
+      "parent": "field_email",
+      "text": "邮箱",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 80
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#374151",
+        "fontSize": 14
+      }
+    },
+    "input_email": {
+      "id": "input_email",
+      "type": "input",
+      "name": "输入框-邮箱",
+      "parent": "field_email",
+      "placeholder": "name@example.com",
+      "value": "",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#ffffff",
+        "color": "#1f2937",
+        "fontSize": 14,
+        "borderRadius": 6,
+        "borderWidth": 1,
+        "borderColor": "#d1d5db",
+        "padding": [
+          8,
+          12,
+          8,
+          12
+        ]
+      }
+    },
+    "field_bio": {
+      "id": "field_bio",
+      "type": "container",
+      "name": "字段行-简介",
+      "parent": "form",
+      "children": [
+        "label_bio",
+        "input_bio"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 8,
+        "padding": 0,
+        "justify": "start",
+        "align": "center"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {}
+    },
+    "label_bio": {
+      "id": "label_bio",
+      "type": "text",
+      "name": "标签-简介",
+      "parent": "field_bio",
+      "text": "简介",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 80
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#374151",
+        "fontSize": 14
+      }
+    },
+    "input_bio": {
+      "id": "input_bio",
+      "type": "input",
+      "name": "输入框-简介",
+      "parent": "field_bio",
+      "placeholder": "一句话介绍自己",
+      "value": "",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#ffffff",
+        "color": "#1f2937",
+        "fontSize": 14,
+        "borderRadius": 6,
+        "borderWidth": 1,
+        "borderColor": "#d1d5db",
+        "padding": [
+          8,
+          12,
+          8,
+          12
+        ]
+      }
+    },
+    "footer": {
+      "id": "footer",
+      "type": "container",
+      "name": "底部操作区",
+      "purpose": "页面级操作按钮，靠右排列，间距 12",
+      "parent": "root",
+      "children": [
+        "cancel_btn",
+        "save_button"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 12,
+        "padding": [
+          16,
+          24,
+          16,
+          24
+        ],
+        "justify": "end",
+        "align": "center"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 72
+        }
+      },
+      "style": {
+        "background": "#ffffff"
+      }
+    },
+    "cancel_btn": {
+      "id": "cancel_btn",
+      "type": "button",
+      "name": "取消按钮",
+      "purpose": "放弃当前修改",
+      "parent": "footer",
+      "text": "取消",
+      "size": {
+        "width": {
+          "mode": "auto"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#e5e7eb",
+        "color": "#374151",
+        "fontSize": 14,
+        "borderRadius": 6,
+        "padding": [
+          8,
+          16,
+          8,
+          16
+        ]
+      }
+    },
+    "save_button": {
+      "type": "button",
+      "name": "保存按钮",
+      "purpose": "表单主操作：保存用户设置并给出成功反馈",
+      "parent": "footer",
+      "text": "保存",
+      "size": {
+        "width": {
+          "mode": "auto"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#2563eb",
+        "color": "#ffffff",
+        "fontSize": 14,
+        "borderRadius": 6,
+        "padding": [
+          8,
+          16,
+          8,
+          16
+        ]
+      },
+      "id": "save_button"
+    }
+  }
+}

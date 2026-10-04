@@ -1,0 +1,94 @@
+{
+  "format": "uidoc",
+  "version": 1,
+  "revision": 2,
+  "name": "free_test",
+  "canvas": {
+    "width": 1280,
+    "height": 800,
+    "background": "#e5e7eb"
+  },
+  "resources": {},
+  "components": {
+    "root": {
+      "type": "container",
+      "name": "页面",
+      "purpose": "页面根容器",
+      "parent": null,
+      "children": [
+        "rect_a",
+        "rect_b"
+      ],
+      "layout": {
+        "mode": "free"
+      },
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 1280
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 800
+        }
+      },
+      "style": {
+        "background": "#ffffff"
+      },
+      "flags": {},
+      "id": "root"
+    },
+    "rect_a": {
+      "id": "rect_a",
+      "type": "rect",
+      "name": "色块甲",
+      "purpose": "",
+      "parent": "root",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 200
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 120
+        }
+      },
+      "style": {
+        "background": "#dbeafe",
+        "borderRadius": 8
+      },
+      "flags": {},
+      "position": {
+        "left": 100,
+        "top": 100
+      }
+    },
+    "rect_b": {
+      "id": "rect_b",
+      "type": "rect",
+      "name": "色块乙",
+      "purpose": "",
+      "parent": "root",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 200
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 120
+        }
+      },
+      "style": {
+        "background": "#fce7f3",
+        "borderRadius": 8
+      },
+      "flags": {},
+      "position": {
+        "left": 400,
+        "top": 200
+      }
+    }
+  }
+}

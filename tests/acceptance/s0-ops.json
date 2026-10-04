@@ -1,0 +1,12 @@
+{
+  "ops": [
+    {
+      "action": "update",
+      "id": "root",
+      "fields": {
+        "purpose": "S0 验收：CLI 升级保存检查"
+      }
+    }
+  ],
+  "baseRevision": 2
+}

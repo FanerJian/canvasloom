@@ -1,0 +1,188 @@
+{
+  "format": "uidoc",
+  "version": 1,
+  "revision": 2,
+  "name": "布局规则核对",
+  "canvas": {
+    "width": 360,
+    "height": 500,
+    "background": "#e5e7eb"
+  },
+  "resources": {},
+  "components": {
+    "root": {
+      "type": "container",
+      "name": "规则核对",
+      "parent": null,
+      "children": [
+        "row",
+        "divider",
+        "free"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "padding": 20,
+        "gap": 20,
+        "justify": "start",
+        "align": "stretch"
+      },
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 360
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 500
+        }
+      },
+      "style": {
+        "background": "#ffffff"
+      },
+      "flags": {},
+      "purpose": "规则核对（修订号+1）",
+      "id": "root"
+    },
+    "row": {
+      "id": "row",
+      "type": "container",
+      "name": "320宽的横向容器",
+      "parent": "root",
+      "children": [
+        "fixed_a",
+        "fixed_b"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "padding": 0,
+        "gap": 0,
+        "justify": "start",
+        "align": "start"
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 100
+        }
+      },
+      "style": {
+        "background": "#f3f4f6"
+      },
+      "flags": {}
+    },
+    "fixed_a": {
+      "id": "fixed_a",
+      "type": "rect",
+      "name": "固定200宽A",
+      "parent": "row",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 200
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 80
+        }
+      },
+      "style": {
+        "background": "#93c5fd"
+      },
+      "flags": {}
+    },
+    "fixed_b": {
+      "id": "fixed_b",
+      "type": "rect",
+      "name": "固定200宽B",
+      "parent": "row",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 200
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 80
+        }
+      },
+      "style": {
+        "background": "#f9a8d4"
+      },
+      "flags": {}
+    },
+    "divider": {
+      "id": "divider",
+      "type": "divider",
+      "name": "固定80宽分割线",
+      "parent": "root",
+      "orientation": "horizontal",
+      "thickness": 2,
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 80
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#111827"
+      },
+      "flags": {}
+    },
+    "free": {
+      "id": "free",
+      "type": "container",
+      "name": "内边距20自由容器",
+      "parent": "root",
+      "children": [
+        "free_child"
+      ],
+      "layout": {
+        "mode": "free",
+        "padding": 20
+      },
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 140
+        }
+      },
+      "style": {
+        "background": "#fef3c7"
+      },
+      "flags": {}
+    },
+    "free_child": {
+      "id": "free_child",
+      "type": "rect",
+      "name": "内容区零点",
+      "parent": "free",
+      "position": {
+        "left": 0,
+        "top": 0
+      },
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 40
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 40
+        }
+      },
+      "style": {
+        "background": "#7c3aed"
+      },
+      "flags": {}
+    }
+  }
+}

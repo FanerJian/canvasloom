@@ -1,0 +1,826 @@
+{
+  "format": "uidoc",
+  "version": 1,
+  "revision": 4,
+  "mode": "game",
+  "name": "模式验证-游戏",
+  "canvas": {
+    "width": 1920,
+    "height": 1080,
+    "background": "#0b0f19"
+  },
+  "resources": {},
+  "components": {
+    "root": {
+      "id": "root",
+      "type": "container",
+      "name": "页面",
+      "purpose": "页面根容器",
+      "parent": null,
+      "children": [
+        "hp_hud",
+        "skill_bar",
+        "dialog",
+        "quest_list",
+        "res_bar",
+        "minimap"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 8,
+        "padding": 0,
+        "justify": "start",
+        "align": "stretch"
+      },
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 1920
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 1080
+        }
+      },
+      "style": {
+        "background": "#111827"
+      },
+      "flags": {}
+    },
+    "hp_hud": {
+      "id": "hp_hud",
+      "type": "container",
+      "name": "容器",
+      "purpose": "",
+      "parent": "root",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 420
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#1f2937"
+      },
+      "flags": {},
+      "children": [
+        "hp_avatar",
+        "hp_info"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 10,
+        "padding": 0,
+        "justify": "start",
+        "align": "stretch"
+      }
+    },
+    "hp_avatar": {
+      "id": "hp_avatar",
+      "type": "rect",
+      "name": "头像",
+      "purpose": "",
+      "parent": "hp_hud",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 44
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 44
+        }
+      },
+      "style": {
+        "background": "#f59e0b",
+        "borderRadius": 4
+      },
+      "flags": {}
+    },
+    "hp_info": {
+      "id": "hp_info",
+      "type": "container",
+      "name": "血条区",
+      "purpose": "",
+      "parent": "hp_hud",
+      "size": {
+        "width": {
+          "mode": "fill",
+          "value": 240
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#1f2937"
+      },
+      "flags": {},
+      "children": [
+        "hp_bar",
+        "hp_level"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 4,
+        "padding": 0,
+        "justify": "start",
+        "align": "stretch"
+      }
+    },
+    "hp_bar": {
+      "id": "hp_bar",
+      "type": "container",
+      "name": "血条",
+      "purpose": "",
+      "parent": "hp_info",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 14
+        }
+      },
+      "style": {
+        "background": "#111827",
+        "borderRadius": 3,
+        "borderWidth": 1,
+        "borderColor": "#4b5563",
+        "overflow": "hidden"
+      },
+      "flags": {},
+      "children": [
+        "hp_fill"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 8,
+        "padding": 0,
+        "justify": "start",
+        "align": "stretch"
+      }
+    },
+    "hp_fill": {
+      "id": "hp_fill",
+      "type": "rect",
+      "name": "血量",
+      "purpose": "",
+      "parent": "hp_bar",
+      "size": {
+        "width": {
+          "mode": "percent",
+          "value": 75
+        },
+        "height": {
+          "mode": "fill",
+          "value": 80
+        }
+      },
+      "style": {
+        "background": "#dc2626",
+        "borderRadius": 2
+      },
+      "flags": {}
+    },
+    "hp_level": {
+      "id": "hp_level",
+      "type": "text",
+      "name": "等级",
+      "purpose": "",
+      "parent": "hp_info",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#9ca3af",
+        "fontSize": 12
+      },
+      "flags": {},
+      "text": "Lv.12 · 战士"
+    },
+    "skill_bar": {
+      "id": "skill_bar",
+      "type": "container",
+      "name": "容器",
+      "purpose": "",
+      "parent": "root",
+      "size": {
+        "width": {
+          "mode": "auto"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#111827",
+        "borderRadius": 6,
+        "borderWidth": 1,
+        "borderColor": "#374151"
+      },
+      "flags": {},
+      "children": [
+        "skill_q",
+        "skill_e",
+        "skill_r",
+        "skill_f"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 8,
+        "padding": 10,
+        "justify": "start",
+        "align": "stretch"
+      }
+    },
+    "skill_q": {
+      "id": "skill_q",
+      "type": "button",
+      "name": "技能 Q",
+      "purpose": "",
+      "parent": "skill_bar",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 48
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 48
+        }
+      },
+      "style": {
+        "background": "#1f2937",
+        "color": "#fbbf24",
+        "fontSize": 18,
+        "borderRadius": 6,
+        "padding": 0,
+        "borderWidth": 1,
+        "borderColor": "#f59e0b",
+        "fontWeight": "bold"
+      },
+      "flags": {},
+      "text": "Q"
+    },
+    "skill_e": {
+      "id": "skill_e",
+      "type": "button",
+      "name": "技能 E",
+      "purpose": "",
+      "parent": "skill_bar",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 48
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 48
+        }
+      },
+      "style": {
+        "background": "#1f2937",
+        "color": "#fbbf24",
+        "fontSize": 18,
+        "borderRadius": 6,
+        "padding": 0,
+        "borderWidth": 1,
+        "borderColor": "#f59e0b",
+        "fontWeight": "bold"
+      },
+      "flags": {},
+      "text": "E"
+    },
+    "skill_r": {
+      "id": "skill_r",
+      "type": "button",
+      "name": "技能 R",
+      "purpose": "",
+      "parent": "skill_bar",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 48
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 48
+        }
+      },
+      "style": {
+        "background": "#1f2937",
+        "color": "#fbbf24",
+        "fontSize": 18,
+        "borderRadius": 6,
+        "padding": 0,
+        "borderWidth": 1,
+        "borderColor": "#f59e0b",
+        "fontWeight": "bold"
+      },
+      "flags": {},
+      "text": "R"
+    },
+    "skill_f": {
+      "id": "skill_f",
+      "type": "button",
+      "name": "技能 F",
+      "purpose": "",
+      "parent": "skill_bar",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 48
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 48
+        }
+      },
+      "style": {
+        "background": "#1f2937",
+        "color": "#fbbf24",
+        "fontSize": 18,
+        "borderRadius": 6,
+        "padding": 0,
+        "borderWidth": 1,
+        "borderColor": "#f59e0b",
+        "fontWeight": "bold"
+      },
+      "flags": {},
+      "text": "F"
+    },
+    "dialog": {
+      "id": "dialog",
+      "type": "container",
+      "name": "容器",
+      "purpose": "",
+      "parent": "root",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 520
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#111827",
+        "borderRadius": 8,
+        "borderWidth": 1,
+        "borderColor": "#4b5563"
+      },
+      "flags": {},
+      "children": [
+        "dialog_speaker",
+        "dialog_line",
+        "dialog_text",
+        "dialog_actions"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 10,
+        "padding": 18,
+        "justify": "start",
+        "align": "stretch"
+      }
+    },
+    "dialog_speaker": {
+      "id": "dialog_speaker",
+      "type": "text",
+      "name": "说话人",
+      "purpose": "",
+      "parent": "dialog",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#fbbf24",
+        "fontSize": 15,
+        "fontWeight": "bold"
+      },
+      "flags": {},
+      "text": "村庄长老"
+    },
+    "dialog_line": {
+      "id": "dialog_line",
+      "type": "divider",
+      "name": "分割线",
+      "purpose": "",
+      "parent": "dialog",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#4b5563"
+      },
+      "flags": {},
+      "orientation": "horizontal",
+      "thickness": 1
+    },
+    "dialog_text": {
+      "id": "dialog_text",
+      "type": "text",
+      "name": "台词",
+      "purpose": "",
+      "parent": "dialog",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#e5e7eb",
+        "fontSize": 15
+      },
+      "flags": {},
+      "text": "勇士，黑暗正在北方蔓延……（就地编辑成功）"
+    },
+    "dialog_actions": {
+      "id": "dialog_actions",
+      "type": "container",
+      "name": "按钮区",
+      "purpose": "",
+      "parent": "dialog",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#1f2937"
+      },
+      "flags": {},
+      "children": [
+        "dialog_next"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 10,
+        "padding": 0,
+        "justify": "end",
+        "align": "stretch"
+      }
+    },
+    "dialog_next": {
+      "id": "dialog_next",
+      "type": "button",
+      "name": "继续按钮",
+      "purpose": "",
+      "parent": "dialog_actions",
+      "size": {
+        "width": {
+          "mode": "auto"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#1f2937",
+        "color": "#fbbf24",
+        "fontSize": 15,
+        "borderRadius": 4,
+        "padding": [
+          9,
+          18,
+          9,
+          18
+        ],
+        "borderWidth": 1,
+        "borderColor": "#f59e0b",
+        "fontWeight": "bold"
+      },
+      "flags": {},
+      "text": "继续 ▸"
+    },
+    "quest_list": {
+      "id": "quest_list",
+      "type": "container",
+      "name": "容器",
+      "purpose": "",
+      "parent": "root",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 260
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#111827",
+        "borderRadius": 6,
+        "borderWidth": 1,
+        "borderColor": "#374151"
+      },
+      "flags": {},
+      "children": [
+        "quest_title",
+        "quest_1",
+        "quest_2",
+        "quest_3"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 6,
+        "padding": 12,
+        "justify": "start",
+        "align": "stretch"
+      }
+    },
+    "quest_title": {
+      "id": "quest_title",
+      "type": "text",
+      "name": "任务标题",
+      "purpose": "",
+      "parent": "quest_list",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#fbbf24",
+        "fontSize": 14,
+        "fontWeight": "bold"
+      },
+      "flags": {},
+      "text": "任务"
+    },
+    "quest_1": {
+      "id": "quest_1",
+      "type": "text",
+      "name": "任务一",
+      "purpose": "",
+      "parent": "quest_list",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#d1d5db",
+        "fontSize": 13
+      },
+      "flags": {},
+      "text": "▸ 击杀 10 只哥布林"
+    },
+    "quest_2": {
+      "id": "quest_2",
+      "type": "text",
+      "name": "任务二",
+      "purpose": "",
+      "parent": "quest_list",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#d1d5db",
+        "fontSize": 13
+      },
+      "flags": {},
+      "text": "▸ 与铁匠对话"
+    },
+    "quest_3": {
+      "id": "quest_3",
+      "type": "text",
+      "name": "任务三",
+      "purpose": "",
+      "parent": "quest_list",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#6b7280",
+        "fontSize": 13
+      },
+      "flags": {},
+      "text": "✓ 修复城墙"
+    },
+    "res_bar": {
+      "id": "res_bar",
+      "type": "container",
+      "name": "容器",
+      "purpose": "",
+      "parent": "root",
+      "size": {
+        "width": {
+          "mode": "auto"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "background": "#111827",
+        "borderRadius": 6,
+        "borderWidth": 1,
+        "borderColor": "#374151"
+      },
+      "flags": {},
+      "children": [
+        "coin_icon",
+        "coin_num",
+        "gem_icon",
+        "gem_num"
+      ],
+      "layout": {
+        "mode": "horizontal",
+        "gap": 14,
+        "padding": [
+          8,
+          14
+        ],
+        "justify": "start",
+        "align": "stretch"
+      }
+    },
+    "coin_icon": {
+      "id": "coin_icon",
+      "type": "rect",
+      "name": "金币图标",
+      "purpose": "",
+      "parent": "res_bar",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 16
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 16
+        }
+      },
+      "style": {
+        "background": "#f59e0b",
+        "borderRadius": 8
+      },
+      "flags": {}
+    },
+    "coin_num": {
+      "id": "coin_num",
+      "type": "text",
+      "name": "金币数",
+      "purpose": "",
+      "parent": "res_bar",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 120
+        },
+        "height": {
+          "mode": "fill"
+        }
+      },
+      "style": {
+        "color": "#fde68a",
+        "fontSize": 14
+      },
+      "flags": {},
+      "text": "× 1,288"
+    },
+    "gem_icon": {
+      "id": "gem_icon",
+      "type": "rect",
+      "name": "宝石图标",
+      "purpose": "",
+      "parent": "res_bar",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 16
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 16
+        }
+      },
+      "style": {
+        "background": "#38bdf8",
+        "borderRadius": 8
+      },
+      "flags": {}
+    },
+    "gem_num": {
+      "id": "gem_num",
+      "type": "text",
+      "name": "宝石数",
+      "purpose": "",
+      "parent": "res_bar",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 120
+        },
+        "height": {
+          "mode": "fill"
+        }
+      },
+      "style": {
+        "color": "#bae6fd",
+        "fontSize": 14
+      },
+      "flags": {},
+      "text": "× 56"
+    },
+    "minimap": {
+      "id": "minimap",
+      "type": "container",
+      "name": "容器",
+      "purpose": "",
+      "parent": "root",
+      "size": {
+        "width": {
+          "mode": "fixed",
+          "value": 180
+        },
+        "height": {
+          "mode": "fixed",
+          "value": 180
+        }
+      },
+      "style": {
+        "background": "#0b0f19",
+        "borderRadius": 6,
+        "borderWidth": 1,
+        "borderColor": "#4b5563"
+      },
+      "flags": {},
+      "children": [
+        "minimap_label"
+      ],
+      "layout": {
+        "mode": "vertical",
+        "gap": 8,
+        "padding": 8,
+        "justify": "end",
+        "align": "end"
+      }
+    },
+    "minimap_label": {
+      "id": "minimap_label",
+      "type": "text",
+      "name": "地图标注",
+      "purpose": "",
+      "parent": "minimap",
+      "size": {
+        "width": {
+          "mode": "fill"
+        },
+        "height": {
+          "mode": "auto"
+        }
+      },
+      "style": {
+        "color": "#6b7280",
+        "fontSize": 12
+      },
+      "flags": {},
+      "text": "小地图"
+    }
+  }
+}

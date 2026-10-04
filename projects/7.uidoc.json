@@ -1,0 +1,44 @@
+{
+  "format": "uidoc",
+  "version": 2,
+  "revision": 1,
+  "mode": "mobile",
+  "name": "7",
+  "canvas": {
+    "width": 390,
+    "height": 844,
+    "background": "#e5e7eb"
+  },
+  "resources": {},
+  "components": {
+    "root": {
+      "id": "root",
+      "type": "container",
+      "name": "页面",
+      "purpose": "页面根容器",
+      "parent": null,
+      "children": [],
+      "layout": {
+        "mode": "vertical",
+        "gap": 8,
+        "padding": 0,
+        "justify": "start",
+        "align": "stretch"
+      },
+      "size": {
+        "width": {
+          "mode": "percent",
+          "value": 100
+        },
+        "height": {
+          "mode": "percent",
+          "value": 100
+        }
+      },
+      "style": {
+        "background": "#f9fafb"
+      },
+      "flags": {}
+    }
+  }
+}

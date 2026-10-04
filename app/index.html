@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>界面工坊 UIForge</title>
+<link rel="stylesheet" href="/app/styles.css?v=5">
+</head>
+<body>
+<header id="topbar">
+  <div class="tb-group tb-brand">
+    <span class="logo-mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M6.5 18.5 12 5.5l5.5 13z" fill="#fff"/></svg>
+    </span>
+    <span class="tb-title">界面工坊</span>
+    <span class="tb-sub">UIForge</span>
+  </div>
+
+  <div class="tb-group proj">
+    <span id="proj-name" class="proj-name">（未打开）</span>
+    <span id="proj-mode" class="proj-mode" title="场景模式（决定画布预设、新组件默认样式与预设块）"></span>
+    <span id="proj-dirty" class="proj-dirty" title="有未保存的修改">●</span>
+    <span id="proj-rev" class="proj-rev"></span>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group">
+    <button id="btn-new" class="tb-btn" title="新建项目">
+      <svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v6M9 15h6"/></svg>新建
+    </button>
+    <button id="btn-open" class="tb-btn" title="打开项目">
+      <svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>打开
+    </button>
+    <button id="btn-save" class="tb-btn primary" title="保存（Ctrl+S）">
+      <svg viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>保存
+    </button>
+  </div>
+
+  <div class="tb-sep"></div>
+
+  <div class="tb-group">
+    <button id="btn-undo" class="tb-btn icon" title="撤销（Ctrl+Z）" aria-label="撤销">
+      <svg viewBox="0 0 24 24"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+    </button>
+    <button id="btn-redo" class="tb-btn icon" title="重做（Ctrl+Y）" aria-label="重做">
+      <svg viewBox="0 0 24 24"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>
+    </button>
+    <button id="btn-copy" class="tb-btn icon" title="复制（Ctrl+C）" aria-label="复制">
+      <svg viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    </button>
+    <button id="btn-paste" class="tb-btn icon" title="粘贴（Ctrl+V）" aria-label="粘贴">
+      <svg viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+    </button>
+    <button id="btn-del" class="tb-btn icon" title="删除（Delete）" aria-label="删除">
+      <svg viewBox="0 0 24 24"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+    </button>
+  </div>
+
+  <div class="tb-right">
+    <div class="tb-group">
+      <button id="btn-check" class="tb-btn" title="实测当前视口并检查布局">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 5-5.5"/></svg>检查布局
+      </button>
+      <button id="btn-export" class="tb-btn" title="导出设计包">
+        <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M17 8l-5-5-5 5"/><path d="M12 3v12"/></svg>导出
+      </button>
+    </div>
+    <div class="tb-sep"></div>
+    <div class="tb-group">
+      <div class="seg" role="tablist" aria-label="编辑模式">
+        <button id="btn-mode-design" class="seg-btn" role="tab">
+          <svg viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></svg>设计
+        </button>
+        <button id="btn-mode-preview" class="seg-btn" role="tab">
+          <svg viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>预览
+        </button>
+      </div>
+      <button id="btn-left-toggle" class="tb-btn icon" title="显示/隐藏左侧面板" aria-label="显示或隐藏左侧面板">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16"/></svg>
+      </button>
+      <button id="btn-right-toggle" class="tb-btn icon" title="显示/隐藏右侧面板" aria-label="显示或隐藏右侧面板">
+        <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M15 4v16"/></svg>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="workspace">
+  <aside id="left">
+    <section class="side-sec">
+      <h3>预设块 <span class="sec-tag">一键成套</span></h3>
+      <div id="pal-blocks"></div>
+    </section>
+    <section class="side-sec">
+      <h3>基础组件</h3>
+      <div id="pal-list"></div>
+      <div class="side-hint">点击加入选中的容器，或直接拖到画布上想放的位置</div>
+    </section>
+    <section class="side-sec grow">
+      <h3>层级树</h3>
+      <div id="tree" class="tree"></div>
+      <div class="side-hint">拖动节点到容器上可改父容器</div>
+    </section>
+  </aside>
+
+  <div id="center">
+    <div id="canvas-wrap">
+      <div id="canvas-stage">
+        <div id="canvas-scaler">
+          <div id="artboard"></div>
+          <div id="overlay"></div>
+        </div>
+      </div>
+    </div>
+    <div id="preview-pane" class="hidden">
+      <div id="pv-bar">
+        <strong>预览</strong>
+        <span id="pv-label"></span>
+        <select id="pv-viewport"></select>
+        <button id="pv-close" class="tb-btn">✎ 返回设计</button>
+      </div>
+      <div id="pv-stage"><iframe id="pv-frame" title="预览"></iframe></div>
+    </div>
+    <div id="zoom-pill">
+      <button id="btn-zoom-out" class="zp-btn" title="缩小（Ctrl+滚轮）" aria-label="缩小">
+        <svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg>
+      </button>
+      <span id="zoom-label" class="zoom-label">100%</span>
+      <button id="btn-zoom-in" class="zp-btn" title="放大（Ctrl+滚轮）" aria-label="放大">
+        <svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+      <span class="zp-sep"></span>
+      <button id="btn-snap" class="zp-btn zp-wide" title="吸附参考线：开（点击关闭；拖动时按住 Alt 临时绕过）">吸附</button>
+      <button id="btn-free-move" class="zp-btn zp-wide active" title="自由移动：开（拖动组件独立摆放）">自由移动</button>
+      <button id="btn-show-outside" class="zp-btn zp-wide" title="设计视图显示画布外内容：开（预览/导出仍按视口裁剪）">画布外</button>
+      <span class="zp-sep"></span>
+      <button id="btn-fit" class="zp-btn zp-wide" title="适应画布">适应</button>
+    </div>
+  </div>
+
+  <aside id="right">
+    <div id="props"></div>
+  </aside>
+</main>
+
+<footer id="statusbar">
+  <span id="status-sel">未选中组件</span>
+  <span class="status-right">双击改文字 · 右键更多操作 · Del 删除 · Ctrl+C/V 复制粘贴 · Ctrl+D 副本 · Ctrl+Z/Y 撤销重做 · 方向键微调 · Ctrl+滚轮缩放
+    <button id="btn-help" class="status-link" title="查看全部快捷键">？快捷键</button>
+  </span>
+</footer>
+
+<div id="modal-root"></div>
+<div id="ctx-root"></div>
+<div id="toast-root"></div>
+
+<script src="/vendor/html2canvas.min.js"></script>
+<script type="module" src="/app/main.js?v=5"></script>
+</body>
+</html>
