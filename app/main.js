@@ -46,8 +46,14 @@ function renderAll(detail = {}) {
   if (state.doc) {
     if (state.mode === 'design') {
       // 仅选中变化时只刷新选中框，避免重建画布打断进行中的拖拽
-      if (detail.reason === 'select') refreshOverlay();
-      else renderCanvas();
+      if (detail.reason === 'select') {
+        // 选中/取消选中时自动展开右栏（组件属性或画布设置）；之后仍可手动收起
+        document.body.classList.remove('hide-right');
+        syncPanelToggles();
+        refreshOverlay();
+      } else {
+        renderCanvas();
+      }
       if (state.lastAdded) {
         const nid = state.lastAdded;
         state.lastAdded = null;
@@ -65,6 +71,9 @@ function renderAll(detail = {}) {
       renderBlocks();
     }
   }
+  // 空状态引导卡：一旦加载了项目就隐藏
+  const esCard = $('empty-state');
+  if (esCard) esCard.classList.toggle('hidden', !!state.doc);
   renderToolbarState();
   // 调试/自动化检查出口（只读快照）
   window.__uiforge = {
@@ -309,6 +318,91 @@ function showShortcuts() {
   openModal('键盘快捷键', box, [['知道了', () => closeModal()]]);
 }
 
+// ---------- 面板开合记忆（localStorage；首次无存档默认左右都收起——打开即画布） ----------
+const PANELS_KEY = 'uiforge.panels';
+function loadPanelPrefs() {
+  let saved = null;
+  try { saved = JSON.parse(localStorage.getItem(PANELS_KEY) || 'null'); } catch { saved = null; }
+  if (saved && typeof saved.left === 'boolean') {
+    document.body.classList.toggle('hide-left', !saved.left);
+    document.body.classList.toggle('hide-right', !saved.right);
+  } else {
+    document.body.classList.add('hide-left', 'hide-right');
+  }
+  syncPanelToggles();
+}
+function savePanelPrefs() {
+  try {
+    localStorage.setItem(PANELS_KEY, JSON.stringify({
+      left: !document.body.classList.contains('hide-left'),
+      right: !document.body.classList.contains('hide-right'),
+    }));
+  } catch { /* localStorage 不可用时忽略 */ }
+}
+
+// ---------- 顶栏「更多」菜单与画布选项弹出层 ----------
+function closeMenus() {
+  const moreMenu = $('more-menu');
+  const optsMenu = $('canvas-opts-menu');
+  const moreWrap = $('more-wrap');
+  if (moreMenu) moreMenu.classList.add('hidden');
+  if (optsMenu) optsMenu.classList.add('hidden');
+  if (moreWrap) moreWrap.classList.remove('open');
+  const moreBtn = $('btn-more');
+  const optsBtn = $('btn-canvas-opts');
+  if (moreBtn) moreBtn.setAttribute('aria-expanded', 'false');
+  if (optsBtn) { optsBtn.setAttribute('aria-expanded', 'false'); optsBtn.classList.remove('active'); }
+}
+
+function initMenus() {
+  const moreBtn = $('btn-more'), moreMenu = $('more-menu'), moreWrap = $('more-wrap');
+  const optsBtn = $('btn-canvas-opts'), optsMenu = $('canvas-opts-menu');
+  moreBtn.addEventListener('click', () => {
+    const open = !moreMenu.classList.toggle('hidden');
+    moreWrap.classList.toggle('open', open);
+    moreBtn.setAttribute('aria-expanded', String(open));
+    optsMenu.classList.add('hidden');
+  });
+  // 画布选项是开关集合：点选后保持弹层打开，便于连续切换并看到状态变化
+  optsBtn.addEventListener('click', () => {
+    const open = !optsMenu.classList.toggle('hidden');
+    optsBtn.setAttribute('aria-expanded', String(open));
+    optsBtn.classList.toggle('active', open);
+    moreMenu.classList.add('hidden');
+    moreWrap.classList.remove('open');
+  });
+  // 点选「更多」里的动作项（复制/粘贴/删除/检查布局）后收起
+  moreMenu.addEventListener('click', (e) => { if (e.target.closest('button')) closeMenus(); });
+  // 点击外部收起（pointerdown 先于 click，不与按钮自身 toggle 冲突）
+  document.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('#more-wrap') || e.target.closest('#canvas-opts-menu')) return;
+    closeMenus();
+  });
+  // Esc 收起（initKeys 已处理选中与弹窗，这里只管菜单）
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenus(); });
+}
+
+// ---------- 左栏标签页：添加 / 层级 ----------
+function showLeftTab(which) {
+  const add = which === 'add';
+  $('tab-add').classList.toggle('active', add);
+  $('tab-tree').classList.toggle('active', !add);
+  $('tab-add').setAttribute('aria-selected', String(add));
+  $('tab-tree').setAttribute('aria-selected', String(!add));
+  $('left-page-add').classList.toggle('hidden', !add);
+  $('left-page-tree').classList.toggle('hidden', add);
+}
+function initLeftTabs() {
+  $('tab-add').addEventListener('click', () => showLeftTab('add'));
+  $('tab-tree').addEventListener('click', () => showLeftTab('tree'));
+}
+
+// ---------- 空状态引导卡 ----------
+function initEmptyState() {
+  $('es-new').addEventListener('click', showNewDialog);
+  $('es-open').addEventListener('click', showOpenDialog);
+}
+
 // ---------- 工具栏 ----------
 function initToolbar() {
   $('btn-new').addEventListener('click', showNewDialog);
@@ -327,12 +421,15 @@ function initToolbar() {
   $('btn-show-outside').addEventListener('click', () => { setShowOutsideCanvas(!state.showOutsideCanvas); });
   $('btn-mode-design').addEventListener('click', () => setMode('design'));
   $('btn-mode-preview').addEventListener('click', () => setMode('preview'));
-  $('btn-left-toggle').addEventListener('click', () => { document.body.classList.toggle('hide-left'); syncPanelToggles(); });
-  $('btn-right-toggle').addEventListener('click', () => { document.body.classList.toggle('hide-right'); syncPanelToggles(); });
+  $('btn-left-toggle').addEventListener('click', () => { document.body.classList.toggle('hide-left'); syncPanelToggles(); savePanelPrefs(); });
+  $('btn-right-toggle').addEventListener('click', () => { document.body.classList.toggle('hide-right'); syncPanelToggles(); savePanelPrefs(); });
   $('btn-help').addEventListener('click', showShortcuts);
   $('btn-check').addEventListener('click', runCheck);
   $('btn-export').addEventListener('click', runExport);
-  syncPanelToggles();
+  initMenus();
+  initLeftTabs();
+  initEmptyState();
+  loadPanelPrefs();
 }
 
 // ---------- 启动 ----------
@@ -353,10 +450,8 @@ async function boot() {
     if (projects.length) opened = await openProjectByName(projects[0].name, { silent: true });
   }
   if (!opened) {
-    // 无项目：创建示例（网站模式，方便上手）
-    const r = await createProject('示例页面', 'web');
-    if (r.ok) await openProjectByName('示例页面', { silent: true });
-    else await showOpenDialog();
+    // 无项目：画布区显示极简引导卡（新建 / 打开），加载项目后自动隐藏
+    $('empty-state').classList.remove('hidden');
   }
   setTimeout(fitZoom, 60);
   connect();
