@@ -1,0 +1,358 @@
+{
+  "format": "uidoc",
+  "version": 3,
+  "revision": 1,
+  "mode": "game",
+  "name": "P0 样例 · v3 冻结样例",
+  "canvas": { "width": 1920, "height": 1080, "background": "#0b0f19" },
+  "resources": {},
+  "features": {
+    "life": { "label": "生命", "data": { "level": "Lv.12 · 战士", "hpPercent": 75 } },
+    "skills": { "label": "技能", "data": { "slots": ["Q", "E", "R", "F"] } },
+    "inventory": { "label": "背包", "data": { "used": 12, "total": 24, "capacityText": "12 / 24 格" } },
+    "quest": { "label": "任务", "data": { "items": ["击杀 10 只哥布林", "与铁匠对话", "修复城墙"] } },
+    "map": { "label": "地图", "data": { "name": "王都近郊" } },
+    "settings": { "label": "设置", "data": {} }
+  },
+  "styles": {
+    "modern": {
+      "label": "现代简洁",
+      "tokens": {
+        "font.body": "system-ui, sans-serif",
+        "color.bg": "#f1f5f9",
+        "color.panel": "#ffffff",
+        "color.sub": "#64748b",
+        "color.accent": "#2563eb",
+        "color.text": "#1f2937",
+        "color.danger": "#dc2626",
+        "radius.panel": 8,
+        "border.width": 1,
+        "border.color": "#e2e8f0",
+        "deco.panel": "none",
+        "space.gap": 8
+      }
+    },
+    "scifi": {
+      "label": "科幻",
+      "tokens": {
+        "font.body": "Consolas, monospace",
+        "color.bg": "#020617",
+        "color.panel": "#0f172a",
+        "color.sub": "#38bdf8",
+        "color.accent": "#38bdf8",
+        "color.text": "#e0f2fe",
+        "color.danger": "#f43f5e",
+        "radius.panel": 0,
+        "border.width": 1,
+        "border.color": "#164e63",
+        "deco.panel": "corner-cut",
+        "space.gap": 4
+      }
+    },
+    "fantasy": {
+      "label": "奇幻",
+      "tokens": {
+        "font.body": "Georgia, serif",
+        "color.bg": "#1c1917",
+        "color.panel": "#292524",
+        "color.sub": "#a8a29e",
+        "color.accent": "#d6b25e",
+        "color.text": "#f5f0e6",
+        "color.danger": "#b91c1c",
+        "radius.panel": 2,
+        "border.width": 2,
+        "border.color": "#78716c",
+        "deco.panel": "corner-ornament",
+        "space.gap": 10
+      }
+    }
+  },
+  "presentations": {
+    "persistent": {
+      "label": "常驻式",
+      "components": {
+        "root": {
+          "id": "root", "type": "container", "name": "页面", "parent": null, "children": ["life_hud", "skill_bar", "inv_panel", "quest_list", "map_box", "settings_btn"],
+          "layout": { "mode": "free" },
+          "size": { "width": { "mode": "percent", "value": 100 }, "height": { "mode": "percent", "value": 100 } },
+          "style": { "background": "$color.bg" }, "flags": {}
+        },
+        "life_hud": {
+          "id": "life_hud", "type": "container", "name": "生命 HUD", "featureId": "life", "parent": "root", "children": ["life_avatar", "life_info"],
+          "purpose": "[feature:life] 常驻血条与等级",
+          "layout": { "mode": "horizontal", "gap": 10, "padding": 0 },
+          "size": { "width": { "mode": "fixed", "value": 420 }, "height": { "mode": "fixed", "value": 60 } },
+          "position": { "left": 24, "top": 24 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "life_avatar": {
+          "id": "life_avatar", "type": "rect", "name": "头像", "featureId": "life", "parent": "life_hud",
+          "size": { "width": { "mode": "fixed", "value": 60 }, "height": { "mode": "fixed", "value": 60 } },
+          "style": { "background": "$color.accent", "borderRadius": 6 }, "flags": {}
+        },
+        "life_info": {
+          "id": "life_info", "type": "container", "name": "血条区", "featureId": "life", "parent": "life_hud", "children": ["life_bar", "life_level"],
+          "layout": { "mode": "vertical", "gap": 4, "padding": 0 },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": {}, "flags": {}
+        },
+        "life_bar": {
+          "id": "life_bar", "type": "container", "name": "血条", "featureId": "life", "parent": "life_info", "children": ["life_fill"],
+          "layout": { "mode": "vertical", "padding": 0 },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "fixed", "value": 16 } },
+          "style": { "background": "$color.bg", "borderRadius": "$radius.panel", "overflow": "hidden" }, "flags": {}
+        },
+        "life_fill": {
+          "id": "life_fill", "type": "rect", "name": "血量", "featureId": "life", "parent": "life_bar",
+          "size": { "width": { "mode": "percent", "value": 75 }, "height": { "mode": "fill" } },
+          "style": { "background": "$color.danger", "borderRadius": 2 }, "flags": {}
+        },
+        "life_level": {
+          "id": "life_level", "type": "text", "name": "等级", "featureId": "life", "parent": "life_info",
+          "bind": { "text": "feature:life.data.level" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 12, "color": "$color.sub" }, "flags": {}
+        },
+        "skill_bar": {
+          "id": "skill_bar", "type": "container", "name": "技能栏", "featureId": "skills", "parent": "root", "children": ["skill_q", "skill_e", "skill_r", "skill_f"],
+          "layout": { "mode": "horizontal", "gap": 8, "padding": 10 },
+          "size": { "width": { "mode": "fixed", "value": 230 }, "height": { "mode": "fixed", "value": 68 } },
+          "position": { "left": 845, "top": 992 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "skill_q": {
+          "id": "skill_q", "type": "button", "name": "技能 Q", "featureId": "skills", "parent": "skill_bar",
+          "bind": { "text": "feature:skills.data.slots[0]" },
+          "size": { "width": { "mode": "fixed", "value": 48 }, "height": { "mode": "fixed", "value": 48 } },
+          "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 18, "fontWeight": "bold", "borderRadius": 6, "padding": 0 }, "flags": {}
+        },
+        "skill_e": {
+          "id": "skill_e", "type": "button", "name": "技能 E", "featureId": "skills", "parent": "skill_bar",
+          "bind": { "text": "feature:skills.data.slots[1]" },
+          "size": { "width": { "mode": "fixed", "value": 48 }, "height": { "mode": "fixed", "value": 48 } },
+          "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 18, "fontWeight": "bold", "borderRadius": 6, "padding": 0 }, "flags": {}
+        },
+        "skill_r": {
+          "id": "skill_r", "type": "button", "name": "技能 R", "featureId": "skills", "parent": "skill_bar",
+          "bind": { "text": "feature:skills.data.slots[2]" },
+          "size": { "width": { "mode": "fixed", "value": 48 }, "height": { "mode": "fixed", "value": 48 } },
+          "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 18, "fontWeight": "bold", "borderRadius": 6, "padding": 0 }, "flags": {}
+        },
+        "skill_f": {
+          "id": "skill_f", "type": "button", "name": "技能 F", "featureId": "skills", "parent": "skill_bar",
+          "bind": { "text": "feature:skills.data.slots[3]" },
+          "size": { "width": { "mode": "fixed", "value": 48 }, "height": { "mode": "fixed", "value": 48 } },
+          "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 18, "fontWeight": "bold", "borderRadius": 6, "padding": 0 }, "flags": {}
+        },
+        "inv_panel": {
+          "id": "inv_panel", "type": "container", "name": "背包面板", "featureId": "inventory", "parent": "root", "children": ["inv_title", "inv_grid", "inv_count"],
+          "layout": { "mode": "vertical", "gap": 8, "padding": 12 },
+          "size": { "width": { "mode": "fixed", "value": 320 }, "height": { "mode": "fixed", "value": 230 } },
+          "position": { "left": 24, "top": 780 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "inv_title": {
+          "id": "inv_title", "type": "text", "name": "背包标题", "featureId": "inventory", "parent": "inv_panel",
+          "bind": { "text": "feature:inventory.label" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 14, "fontWeight": "bold", "color": "$color.accent" }, "flags": {}
+        },
+        "inv_grid": {
+          "id": "inv_grid", "type": "container", "name": "物品格", "featureId": "inventory", "parent": "inv_panel", "children": ["inv_slot_1", "inv_slot_2", "inv_slot_3", "inv_slot_4"],
+          "layout": { "mode": "grid", "columnGap": 8, "rowGap": 8, "padding": 0, "tracks": { "columns": [ { "mode": "fixed", "value": 64 }, { "mode": "fixed", "value": 64 }, { "mode": "fixed", "value": 64 }, { "mode": "fixed", "value": 64 } ], "rows": [ { "mode": "fixed", "value": 64 } ] } },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": {}, "flags": {}
+        },
+        "inv_slot_1": { "id": "inv_slot_1", "type": "rect", "name": "物品格1", "featureId": "inventory", "parent": "inv_grid", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": 4 }, "flags": {} },
+        "inv_slot_2": { "id": "inv_slot_2", "type": "rect", "name": "物品格2", "featureId": "inventory", "parent": "inv_grid", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": 4 }, "flags": {} },
+        "inv_slot_3": { "id": "inv_slot_3", "type": "rect", "name": "物品格3", "featureId": "inventory", "parent": "inv_grid", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": 4 }, "flags": {} },
+        "inv_slot_4": { "id": "inv_slot_4", "type": "rect", "name": "物品格4", "featureId": "inventory", "parent": "inv_grid", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": 4 }, "flags": {} },
+        "inv_count": {
+          "id": "inv_count", "type": "text", "name": "容量文字", "featureId": "inventory", "parent": "inv_panel",
+          "bind": { "text": "feature:inventory.data.capacityText" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 12, "color": "$color.sub" }, "flags": {}
+        },
+        "quest_list": {
+          "id": "quest_list", "type": "container", "name": "任务列表", "featureId": "quest", "parent": "root", "children": ["quest_title", "quest_1", "quest_2", "quest_3"],
+          "layout": { "mode": "vertical", "gap": 6, "padding": 12 },
+          "size": { "width": { "mode": "fixed", "value": 260 }, "height": { "mode": "fixed", "value": 150 } },
+          "position": { "left": 1636, "top": 224 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "quest_title": {
+          "id": "quest_title", "type": "text", "name": "任务标题", "featureId": "quest", "parent": "quest_list",
+          "bind": { "text": "feature:quest.label" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 14, "fontWeight": "bold", "color": "$color.accent" }, "flags": {}
+        },
+        "quest_1": {
+          "id": "quest_1", "type": "text", "name": "任务一", "featureId": "quest", "parent": "quest_list",
+          "bind": { "text": "feature:quest.data.items[0]" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 13, "color": "$color.text" }, "flags": {}
+        },
+        "quest_2": {
+          "id": "quest_2", "type": "text", "name": "任务二", "featureId": "quest", "parent": "quest_list",
+          "bind": { "text": "feature:quest.data.items[1]" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 13, "color": "$color.text" }, "flags": {}
+        },
+        "quest_3": {
+          "id": "quest_3", "type": "text", "name": "任务三", "featureId": "quest", "parent": "quest_list",
+          "bind": { "text": "feature:quest.data.items[2]" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 13, "color": "$color.sub" }, "flags": {}
+        },
+        "map_box": {
+          "id": "map_box", "type": "container", "name": "小地图", "featureId": "map", "parent": "root", "children": ["map_view", "map_label"],
+          "layout": { "mode": "vertical", "gap": 6, "padding": 8 },
+          "size": { "width": { "mode": "fixed", "value": 180 }, "height": { "mode": "fixed", "value": 180 } },
+          "position": { "left": 1716, "top": 24 },
+          "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "map_view": { "id": "map_view", "type": "rect", "name": "地图画面", "featureId": "map", "parent": "map_box", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.panel" }, "flags": {} },
+        "map_label": {
+          "id": "map_label", "type": "text", "name": "地图标注", "featureId": "map", "parent": "map_box",
+          "bind": { "text": "feature:map.data.name" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 12, "color": "$color.sub" }, "flags": {}
+        },
+        "settings_btn": {
+          "id": "settings_btn", "type": "button", "name": "设置按钮", "featureId": "settings", "parent": "root",
+          "bind": { "text": "feature:settings.label" },
+          "size": { "width": { "mode": "fixed", "value": 56 }, "height": { "mode": "fixed", "value": 36 } },
+          "position": { "left": 1648, "top": 24 },
+          "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 14, "fontWeight": "bold", "borderRadius": 4, "borderWidth": "$border.width", "borderColor": "$border.color", "padding": 0 }, "flags": {}
+        }
+      }
+    },
+    "popup": {
+      "label": "按钮展开式",
+      "components": {
+        "root": {
+          "id": "root", "type": "container", "name": "页面", "parent": null, "children": ["life_hud", "skill_bar", "menu_btn", "panels_root"],
+          "layout": { "mode": "free" },
+          "size": { "width": { "mode": "percent", "value": 100 }, "height": { "mode": "percent", "value": 100 } },
+          "style": { "background": "$color.bg" }, "flags": {}
+        },
+        "life_hud": {
+          "id": "life_hud", "type": "container", "name": "生命 HUD", "featureId": "life", "parent": "root", "children": ["life_avatar", "life_info"],
+          "layout": { "mode": "horizontal", "gap": 10, "padding": 0 },
+          "size": { "width": { "mode": "fixed", "value": 420 }, "height": { "mode": "fixed", "value": 60 } },
+          "position": { "left": 24, "top": 24 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "life_avatar": { "id": "life_avatar", "type": "rect", "name": "头像", "featureId": "life", "parent": "life_hud", "size": { "width": { "mode": "fixed", "value": 60 }, "height": { "mode": "fixed", "value": 60 } }, "style": { "background": "$color.accent", "borderRadius": 6 }, "flags": {} },
+        "life_info": {
+          "id": "life_info", "type": "container", "name": "血条区", "featureId": "life", "parent": "life_hud", "children": ["life_bar", "life_level"],
+          "layout": { "mode": "vertical", "gap": 4, "padding": 0 },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": {}, "flags": {}
+        },
+        "life_bar": {
+          "id": "life_bar", "type": "container", "name": "血条", "featureId": "life", "parent": "life_info", "children": ["life_fill"],
+          "layout": { "mode": "vertical", "padding": 0 },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "fixed", "value": 16 } },
+          "style": { "background": "$color.bg", "borderRadius": "$radius.panel", "overflow": "hidden" }, "flags": {}
+        },
+        "life_fill": { "id": "life_fill", "type": "rect", "name": "血量", "featureId": "life", "parent": "life_bar", "size": { "width": { "mode": "percent", "value": 75 }, "height": { "mode": "fill" } }, "style": { "background": "$color.danger", "borderRadius": 2 }, "flags": {} },
+        "life_level": {
+          "id": "life_level", "type": "text", "name": "等级", "featureId": "life", "parent": "life_info",
+          "bind": { "text": "feature:life.data.level" },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": { "fontSize": 12, "color": "$color.sub" }, "flags": {}
+        },
+        "skill_bar": {
+          "id": "skill_bar", "type": "container", "name": "技能栏", "featureId": "skills", "parent": "root", "children": ["skill_q", "skill_e", "skill_r", "skill_f"],
+          "layout": { "mode": "horizontal", "gap": 8, "padding": 10 },
+          "size": { "width": { "mode": "fixed", "value": 230 }, "height": { "mode": "fixed", "value": 68 } },
+          "position": { "left": 845, "top": 992 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "skill_q": { "id": "skill_q", "type": "button", "name": "技能 Q", "featureId": "skills", "parent": "skill_bar", "bind": { "text": "feature:skills.data.slots[0]" }, "size": { "width": { "mode": "fixed", "value": 48 }, "height": { "mode": "fixed", "value": 48 } }, "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 18, "fontWeight": "bold", "borderRadius": 6, "padding": 0 }, "flags": {} },
+        "skill_e": { "id": "skill_e", "type": "button", "name": "技能 E", "featureId": "skills", "parent": "skill_bar", "bind": { "text": "feature:skills.data.slots[1]" }, "size": { "width": { "mode": "fixed", "value": 48 }, "height": { "mode": "fixed", "value": 48 } }, "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 18, "fontWeight": "bold", "borderRadius": 6, "padding": 0 }, "flags": {} },
+        "skill_r": { "id": "skill_r", "type": "button", "name": "技能 R", "featureId": "skills", "parent": "skill_bar", "bind": { "text": "feature:skills.data.slots[2]" }, "size": { "width": { "mode": "fixed", "value": 48 }, "height": { "mode": "fixed", "value": 48 } }, "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 18, "fontWeight": "bold", "borderRadius": 6, "padding": 0 }, "flags": {} },
+        "skill_f": { "id": "skill_f", "type": "button", "name": "技能 F", "featureId": "skills", "parent": "skill_bar", "bind": { "text": "feature:skills.data.slots[3]" }, "size": { "width": { "mode": "fixed", "value": 48 }, "height": { "mode": "fixed", "value": 48 } }, "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 18, "fontWeight": "bold", "borderRadius": 6, "padding": 0 }, "flags": {} },
+        "menu_btn": {
+          "id": "menu_btn", "type": "button", "name": "主菜单按钮", "parent": "root",
+          "actions": { "click": { "type": "toggle", "target": "panels_root" } },
+          "size": { "width": { "mode": "fixed", "value": 140 }, "height": { "mode": "fixed", "value": 48 } },
+          "position": { "left": 890, "top": 1000 },
+          "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 16, "fontWeight": "bold", "borderRadius": 6, "borderWidth": "$border.width", "borderColor": "$border.color", "padding": 0 }, "flags": {}
+        },
+        "panels_root": {
+          "id": "panels_root", "type": "container", "name": "功能面板层", "parent": "root",
+          "children": ["inv_panel", "quest_list", "settings_panel", "map_box"],
+          "initiallyOpen": false,
+          "layout": { "mode": "free" },
+          "size": { "width": { "mode": "percent", "value": 100 }, "height": { "mode": "percent", "value": 100 } },
+          "position": { "left": 0, "top": 0 },
+          "style": {}, "flags": {}
+        },
+        "inv_panel": {
+          "id": "inv_panel", "type": "container", "name": "背包面板", "featureId": "inventory", "parent": "panels_root", "children": ["inv_title", "inv_grid", "inv_count"],
+          "layout": { "mode": "vertical", "gap": 8, "padding": 12 },
+          "size": { "width": { "mode": "fixed", "value": 320 }, "height": { "mode": "fixed", "value": 230 } },
+          "position": { "left": 24, "top": 780 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "inv_title": { "id": "inv_title", "type": "text", "name": "背包标题", "featureId": "inventory", "parent": "inv_panel", "bind": { "text": "feature:inventory.label" }, "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } }, "style": { "fontSize": 14, "fontWeight": "bold", "color": "$color.accent" }, "flags": {} },
+        "inv_grid": {
+          "id": "inv_grid", "type": "container", "name": "物品格", "featureId": "inventory", "parent": "inv_panel", "children": ["inv_slot_1", "inv_slot_2", "inv_slot_3", "inv_slot_4"],
+          "layout": { "mode": "grid", "columnGap": 8, "rowGap": 8, "padding": 0, "tracks": { "columns": [ { "mode": "fixed", "value": 64 }, { "mode": "fixed", "value": 64 }, { "mode": "fixed", "value": 64 }, { "mode": "fixed", "value": 64 } ], "rows": [ { "mode": "fixed", "value": 64 } ] } },
+          "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } },
+          "style": {}, "flags": {}
+        },
+        "inv_slot_1": { "id": "inv_slot_1", "type": "rect", "name": "物品格1", "featureId": "inventory", "parent": "inv_grid", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": 4 }, "flags": {} },
+        "inv_slot_2": { "id": "inv_slot_2", "type": "rect", "name": "物品格2", "featureId": "inventory", "parent": "inv_grid", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": 4 }, "flags": {} },
+        "inv_slot_3": { "id": "inv_slot_3", "type": "rect", "name": "物品格3", "featureId": "inventory", "parent": "inv_grid", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": 4 }, "flags": {} },
+        "inv_slot_4": { "id": "inv_slot_4", "type": "rect", "name": "物品格4", "featureId": "inventory", "parent": "inv_grid", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": 4 }, "flags": {} },
+        "inv_count": { "id": "inv_count", "type": "text", "name": "容量文字", "featureId": "inventory", "parent": "inv_panel", "bind": { "text": "feature:inventory.data.capacityText" }, "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } }, "style": { "fontSize": 12, "color": "$color.sub" }, "flags": {} },
+        "quest_list": {
+          "id": "quest_list", "type": "container", "name": "任务列表", "featureId": "quest", "parent": "panels_root", "children": ["quest_title", "quest_1", "quest_2", "quest_3"],
+          "layout": { "mode": "vertical", "gap": 6, "padding": 12 },
+          "size": { "width": { "mode": "fixed", "value": 260 }, "height": { "mode": "fixed", "value": 150 } },
+          "position": { "left": 1636, "top": 224 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "quest_title": { "id": "quest_title", "type": "text", "name": "任务标题", "featureId": "quest", "parent": "quest_list", "bind": { "text": "feature:quest.label" }, "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } }, "style": { "fontSize": 14, "fontWeight": "bold", "color": "$color.accent" }, "flags": {} },
+        "quest_1": { "id": "quest_1", "type": "text", "name": "任务一", "featureId": "quest", "parent": "quest_list", "bind": { "text": "feature:quest.data.items[0]" }, "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } }, "style": { "fontSize": 13, "color": "$color.text" }, "flags": {} },
+        "quest_2": { "id": "quest_2", "type": "text", "name": "任务二", "featureId": "quest", "parent": "quest_list", "bind": { "text": "feature:quest.data.items[1]" }, "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } }, "style": { "fontSize": 13, "color": "$color.text" }, "flags": {} },
+        "quest_3": { "id": "quest_3", "type": "text", "name": "任务三", "featureId": "quest", "parent": "quest_list", "bind": { "text": "feature:quest.data.items[2]" }, "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } }, "style": { "fontSize": 13, "color": "$color.sub" }, "flags": {} },
+        "settings_panel": {
+          "id": "settings_panel", "type": "container", "name": "设置面板", "featureId": "settings", "parent": "panels_root", "children": ["settings_title", "settings_close"],
+          "layout": { "mode": "vertical", "gap": 10, "padding": 16 },
+          "size": { "width": { "mode": "fixed", "value": 360 }, "height": { "mode": "fixed", "value": 220 } },
+          "position": { "left": 780, "top": 400 },
+          "style": { "background": "$color.panel", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "settings_title": { "id": "settings_title", "type": "text", "name": "设置标题", "featureId": "settings", "parent": "settings_panel", "bind": { "text": "feature:settings.label" }, "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } }, "style": { "fontSize": 16, "fontWeight": "bold", "color": "$color.text" }, "flags": {} },
+        "settings_close": {
+          "id": "settings_close", "type": "button", "name": "关闭按钮", "featureId": "settings", "parent": "settings_panel",
+          "actions": { "click": { "type": "close", "target": "panels_root" } },
+          "size": { "width": { "mode": "auto" }, "height": { "mode": "auto" } },
+          "style": { "background": "$color.panel", "color": "$color.accent", "fontSize": 14, "borderRadius": 6, "borderWidth": "$border.width", "borderColor": "$border.color", "padding": [8, 16, 8, 16] }, "flags": {}
+        },
+        "map_box": {
+          "id": "map_box", "type": "container", "name": "小地图", "featureId": "map", "parent": "panels_root", "children": ["map_view", "map_label"],
+          "layout": { "mode": "vertical", "gap": 6, "padding": 8 },
+          "size": { "width": { "mode": "fixed", "value": 180 }, "height": { "mode": "fixed", "value": 180 } },
+          "position": { "left": 1716, "top": 24 },
+          "style": { "background": "$color.bg", "borderWidth": "$border.width", "borderColor": "$border.color", "borderRadius": "$radius.panel" }, "flags": {}
+        },
+        "map_view": { "id": "map_view", "type": "rect", "name": "地图画面", "featureId": "map", "parent": "map_box", "size": { "width": { "mode": "fill" }, "height": { "mode": "fill" } }, "style": { "background": "$color.panel" }, "flags": {} },
+        "map_label": { "id": "map_label", "type": "text", "name": "地图标注", "featureId": "map", "parent": "map_box", "bind": { "text": "feature:map.data.name" }, "size": { "width": { "mode": "fill" }, "height": { "mode": "auto" } }, "style": { "fontSize": 12, "color": "$color.sub" }, "flags": {} }
+      }
+    }
+  },
+  "variants": [
+    { "id": "A1", "label": "常驻 · 现代简洁", "presentation": "persistent", "style": "modern", "overrides": { "tokens": { "color.accent": "#0ea5e9" }, "components": {} } },
+    { "id": "A2", "label": "常驻 · 科幻", "presentation": "persistent", "style": "scifi", "overrides": { "tokens": {}, "components": {} } },
+    { "id": "A3", "label": "常驻 · 奇幻", "presentation": "persistent", "style": "fantasy", "overrides": { "tokens": {}, "components": {} } },
+    { "id": "B1", "label": "展开 · 现代简洁", "presentation": "popup", "style": "modern", "overrides": { "tokens": {}, "components": {} } },
+    { "id": "B2", "label": "展开 · 科幻", "presentation": "popup", "style": "scifi", "overrides": { "tokens": {}, "components": {} } },
+    { "id": "B3", "label": "展开 · 奇幻", "presentation": "popup", "style": "fantasy", "overrides": { "tokens": {}, "components": {} } }
+  ],
+  "activeVariant": "A1"
+}

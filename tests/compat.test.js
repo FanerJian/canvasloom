@@ -57,7 +57,8 @@ test('upgradeDoc：v2 文档原样深拷贝返回', () => {
 });
 
 test('更高版本被明确拒绝，不自动降级', () => {
-  const fake = { format: 'uidoc', version: 3, revision: 1, components: {} };
+  // v3 支持后，"更高版本"夹具改为 4（决策 10：version>3 → E_VERSION_UNSUPPORTED；v3 读取见 v3-protocol.test.js）
+  const fake = { format: 'uidoc', version: 4, revision: 1, components: {} };
   assert.throws(() => upgradeDoc(fake), (e) => e instanceof CompatError && e.code === 'E_VERSION_UNSUPPORTED');
   assert.throws(() => inspectDocVersion(fake), (e) => e instanceof CompatError && e.code === 'E_VERSION_UNSUPPORTED');
 });

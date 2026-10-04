@@ -316,6 +316,111 @@ export const UI_MODES = {
           { idBase: 'minimap_label', type: 'text', name: '地图标注', text: '小地图', style: { fontSize: 12, color: '#6b7280' } },
         ],
       },
+      {
+        label: '背包', desc: '标题 + 4×2 物品格子',
+        idBase: 'inventory', type: 'container',
+        layout: { mode: 'vertical', gap: 10, padding: 14 },
+        size: { width: { mode: 'fixed', value: 320 }, height: { mode: 'auto' } },
+        style: { background: '#111827', borderRadius: 8, borderWidth: 1, borderColor: '#4b5563' },
+        children: [
+          {
+            idBase: 'inv_header', type: 'container', name: '背包头部',
+            layout: { mode: 'horizontal', justify: 'space-between', align: 'center' },
+            size: { width: { mode: 'fill' }, height: { mode: 'auto' } },
+            children: [
+              { idBase: 'inv_title', type: 'text', name: '背包标题', text: '背包', style: { fontSize: 14, fontWeight: 'bold', color: '#fbbf24' } },
+              { idBase: 'inv_count', type: 'text', name: '已用格数', text: '12 / 24 已用', style: { fontSize: 12, color: '#9ca3af' } },
+            ],
+          },
+          {
+            idBase: 'inv_grid', type: 'container', name: '物品格子',
+            layout: {
+              mode: 'grid', columnGap: 8, rowGap: 8,
+              tracks: {
+                columns: [
+                  { mode: 'fixed', value: 64 }, { mode: 'fixed', value: 64 },
+                  { mode: 'fixed', value: 64 }, { mode: 'fixed', value: 64 },
+                ],
+                rows: [{ mode: 'fixed', value: 64 }, { mode: 'fixed', value: 64 }],
+              },
+            },
+            size: { width: { mode: 'fill' }, height: { mode: 'auto' } },
+            style: { background: '#111827' },
+            children: [
+              {
+                idBase: 'inv_slot_1', type: 'container', name: '物品格 1',
+                layout: { mode: 'vertical', justify: 'center', align: 'center' },
+                size: { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } },
+                style: { borderRadius: 6, borderWidth: 1, borderColor: '#374151' },
+                children: [
+                  { idBase: 'inv_item_1', type: 'rect', name: '物品图标', size: { width: { mode: 'fixed', value: 40 }, height: { mode: 'fixed', value: 40 } }, style: { background: '#f59e0b', borderRadius: 6 } },
+                ],
+              },
+              {
+                idBase: 'inv_slot_2', type: 'container', name: '物品格 2',
+                layout: { mode: 'vertical', justify: 'center', align: 'center' },
+                size: { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } },
+                style: { borderRadius: 6, borderWidth: 1, borderColor: '#374151' },
+                children: [
+                  { idBase: 'inv_item_2', type: 'rect', name: '宝石图标', size: { width: { mode: 'fixed', value: 40 }, height: { mode: 'fixed', value: 40 } }, style: { background: '#38bdf8', borderRadius: 6 } },
+                ],
+              },
+              { idBase: 'inv_slot_3', type: 'container', name: '物品格 3', layout: { mode: 'vertical', justify: 'center', align: 'center' }, size: { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } }, style: { borderRadius: 6, borderWidth: 1, borderColor: '#374151' } },
+              { idBase: 'inv_slot_4', type: 'container', name: '物品格 4', layout: { mode: 'vertical', justify: 'center', align: 'center' }, size: { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } }, style: { borderRadius: 6, borderWidth: 1, borderColor: '#374151' } },
+              { idBase: 'inv_slot_5', type: 'container', name: '物品格 5', layout: { mode: 'vertical', justify: 'center', align: 'center' }, size: { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } }, style: { borderRadius: 6, borderWidth: 1, borderColor: '#374151' } },
+              { idBase: 'inv_slot_6', type: 'container', name: '物品格 6', layout: { mode: 'vertical', justify: 'center', align: 'center' }, size: { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } }, style: { borderRadius: 6, borderWidth: 1, borderColor: '#374151' } },
+              { idBase: 'inv_slot_7', type: 'container', name: '物品格 7', layout: { mode: 'vertical', justify: 'center', align: 'center' }, size: { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } }, style: { borderRadius: 6, borderWidth: 1, borderColor: '#374151' } },
+              { idBase: 'inv_slot_8', type: 'container', name: '物品格 8', layout: { mode: 'vertical', justify: 'center', align: 'center' }, size: { width: { mode: 'fixed', value: 64 }, height: { mode: 'fixed', value: 64 } }, style: { borderRadius: 6, borderWidth: 1, borderColor: '#374151' } },
+            ],
+          },
+        ],
+      },
+      {
+        label: '设置', desc: '标题 + 设置项行 + 返回',
+        idBase: 'settings', type: 'container',
+        layout: { mode: 'vertical', gap: 12, padding: 18 },
+        size: { width: { mode: 'fixed', value: 360 }, height: { mode: 'auto' } },
+        style: { background: '#111827', borderRadius: 8, borderWidth: 1, borderColor: '#4b5563' },
+        children: [
+          { idBase: 'set_title', type: 'text', name: '设置标题', text: '设置', style: { fontSize: 15, fontWeight: 'bold', color: '#fbbf24' } },
+          { idBase: 'set_line', type: 'divider', name: '分割线' },
+          {
+            idBase: 'set_row_sound', type: 'container', name: '音效行',
+            layout: { mode: 'horizontal', justify: 'space-between', align: 'center' },
+            size: { width: { mode: 'fill' }, height: { mode: 'auto' } },
+            children: [
+              { idBase: 'set_sound_label', type: 'text', name: '音效标签', text: '音效', style: { fontSize: 14 } },
+              { idBase: 'set_sound_toggle', type: 'button', name: '音效开关', text: '开' },
+            ],
+          },
+          {
+            idBase: 'set_row_display', type: 'container', name: '全屏行',
+            layout: { mode: 'horizontal', justify: 'space-between', align: 'center' },
+            size: { width: { mode: 'fill' }, height: { mode: 'auto' } },
+            children: [
+              { idBase: 'set_display_label', type: 'text', name: '全屏标签', text: '全屏', style: { fontSize: 14 } },
+              { idBase: 'set_display_toggle', type: 'button', name: '全屏开关', text: '关' },
+            ],
+          },
+          {
+            idBase: 'set_row_quality', type: 'container', name: '画质行',
+            layout: { mode: 'horizontal', justify: 'space-between', align: 'center' },
+            size: { width: { mode: 'fill' }, height: { mode: 'auto' } },
+            children: [
+              { idBase: 'set_quality_label', type: 'text', name: '画质标签', text: '画质', style: { fontSize: 14 } },
+              { idBase: 'set_quality_toggle', type: 'button', name: '画质选项', text: '中' },
+            ],
+          },
+          {
+            idBase: 'set_row_actions', type: 'container', name: '返回行',
+            layout: { mode: 'horizontal', justify: 'end', gap: 10 },
+            size: { width: { mode: 'fill' }, height: { mode: 'auto' } },
+            children: [
+              { idBase: 'set_back', type: 'button', name: '返回按钮', text: '返回' },
+            ],
+          },
+        ],
+      },
     ],
   },
 

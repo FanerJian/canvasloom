@@ -24,7 +24,8 @@ test('现有项目原始文件静态校验全部通过', () => {
 
 test('不支持的版本号产生 E_VERSION 错误', () => {
   const doc = newDoc('版本测试', 'generic');
-  doc.version = 9;
+  // v1/v2 路径行为不变：仍报 E_VERSION；version>3 由冻结决策 10 改报 E_VERSION_UNSUPPORTED（见 v3-protocol.test.js）
+  doc.version = 0;
   const report = validateDoc(doc);
   assert.equal(report.ok, false);
   assert.ok(report.errors.some((e) => e.code === 'E_VERSION'));

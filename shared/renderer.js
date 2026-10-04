@@ -27,6 +27,41 @@ function ensureBaseStyle(docu) {
   }
 }
 
+// v3 装饰伴随 CSS（冻结决策 9，deco 仅 container）：corner-cut 用 clip-path
+// 四角切角；corner-ornament 用两个全覆盖伪元素各画两角的角饰线，颜色跟随
+// currentColor（设计可通过组件 color 样式控制装饰色）。仅当容器带 deco 类时
+// 生效；按需懒注入，v2 旧文档（无 deco）不会产生这段 CSS。
+const DECO_CSS = `
+.uiw-deco-corner-cut { clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 10px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 10px 100%, 0 calc(100% - 10px), 0 10px); }
+.uiw-deco-corner-ornament::before, .uiw-deco-corner-ornament::after {
+  content: ''; position: absolute; left: 0; top: 0; right: 0; bottom: 0; pointer-events: none;
+}
+.uiw-deco-corner-ornament::before {
+  background:
+    linear-gradient(to right, currentColor 2px, transparent 2px) 0 0 / 14px 2px no-repeat,
+    linear-gradient(to bottom, currentColor 2px, transparent 2px) 0 0 / 2px 14px no-repeat,
+    linear-gradient(to left, currentColor 2px, transparent 2px) 100% 0 / 14px 2px no-repeat,
+    linear-gradient(to bottom, currentColor 2px, transparent 2px) 100% 0 / 2px 14px no-repeat;
+}
+.uiw-deco-corner-ornament::after {
+  background:
+    linear-gradient(to right, currentColor 2px, transparent 2px) 0 100% / 14px 2px no-repeat,
+    linear-gradient(to top, currentColor 2px, transparent 2px) 0 100% / 2px 14px no-repeat,
+    linear-gradient(to left, currentColor 2px, transparent 2px) 100% 100% / 14px 2px no-repeat,
+    linear-gradient(to top, currentColor 2px, transparent 2px) 100% 100% / 2px 14px no-repeat;
+}
+`;
+
+function ensureDecoStyle(docu) {
+  const d = docu;
+  if (!d.getElementById('uiw-deco-style')) {
+    const st = d.createElement('style');
+    st.id = 'uiw-deco-style';
+    st.textContent = DECO_CSS;
+    d.head.appendChild(st);
+  }
+}
+
 // ---------- 尺寸模式 → CSS ----------
 function applySize(style, comp, axis, ctx) {
   const s = (comp.size || {})[axis];
@@ -102,6 +137,8 @@ function applyStyleFields(style, comp) {
   if (st.color != null) style.color = st.color;
   if (st.fontSize != null) style.fontSize = st.fontSize + 'px';
   if (st.fontWeight != null) style.fontWeight = FONT_WEIGHTS[st.fontWeight] || '400';
+  // v3 新增（冻结决策 9）：系统字体栈原样输出（取值合法性由 v3 校验/解析保证）
+  if (st.fontFamily != null) style.fontFamily = st.fontFamily;
   if (st.textAlign != null) style.textAlign = st.textAlign;
   if (st.borderRadius != null) style.borderRadius = st.borderRadius + 'px';
   if (st.borderWidth != null && st.borderWidth > 0) {
@@ -227,6 +264,14 @@ function buildNode(doc, comp, parentComp, opts) {
     }
     case 'rect': break;
     case 'container': {
+      // v3 装饰（冻结决策 9）：固定类名 + 伴随 CSS（ensureDecoStyle 懒注入）。
+      // 画布/srcdoc 预览/导出页共用本模块，deco 表现天然一致；
+      // 'none' 或缺省不加类、不注入 CSS，v2 旧文档渲染输出保持逐字节不变。
+      const deco = (comp.style || {}).deco;
+      if (deco === 'corner-cut' || deco === 'corner-ornament') {
+        el.classList.add('uiw-deco-' + deco);
+        ensureDecoStyle(d);
+      }
       applyContainerLayout(el, comp, doc, opts);
       const kids = comp.children || [];
       for (const cid of kids) {

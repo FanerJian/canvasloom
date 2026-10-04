@@ -7,6 +7,9 @@ import { UI_MODES, DEFAULT_MODE } from './modes.js';
 
 export const DOC_FORMAT = 'uidoc';
 export const DOC_VERSION = 2;
+// v3 冻结版本号（商业级路线图 §4 决策 1）。newDoc 仍产 v2；v3 只由明确使用新能力的路径创建，
+// v1/v2 项目长期可不入 v3（不自动升级、不自动写回）。
+export const DOC_VERSION_V3 = 3;
 export { UI_MODES, DEFAULT_MODE };
 
 // ---------- 布局模式 ----------
@@ -67,7 +70,58 @@ export const STYLE_FIELDS = [
   { key: 'opacity',      label: '不透明度', type: 'number', min: 0, max: 1, step: 0.05 },
   { key: 'padding',      label: '内边距',   type: 'padding', types: ['text', 'button', 'input'] },
   { key: 'overflow',     label: '溢出裁剪', type: 'enum', options: { visible: '显示溢出', hidden: '裁剪溢出' }, types: ['container'] },
+  // 自 M2 起渲染器统一支持 fontFamily/deco（画布/预览/导出三处同源），升为共享白名单（冻结决策 9：解析后同样生效）
+  { key: 'fontFamily',   label: '字体族',   type: 'font' },
+  { key: 'deco',         label: '装饰',     type: 'enum', options: { none: '无', 'corner-cut': '切角', 'corner-ornament': '角饰' }, types: ['container'] },
 ];
+
+// ---------- v3 新增（冻结决策见 商业级路线图.md §4；M1 只做校验，渲染由 M2 实现） ----------
+// v3 组件白名单 = v2 组件白名单 + 以下四个字段（validate.js 据此分流）
+export const V3_COMPONENT_EXTRA_FIELDS = ['featureId', 'bind', 'actions', 'initiallyOpen'];
+
+// v3 样式白名单：与 v2 共用 STYLE_FIELDS（fontFamily/deco 已并入共享表，见上；令牌值可出现在任何样式字段）
+export const V3_STYLE_FIELDS = STYLE_FIELDS;
+
+// actions 首版仅 click 事件，类型仅 toggle/open/close（冻结决策 5）
+export const V3_ACTION_EVENTS = ['click'];
+export const V3_ACTION_TYPES = ['toggle', 'open', 'close'];
+
+// bind 值语法：feature:<id>.<路径>；路径 = 点分键（标识符）与 [n] 数组下标的组合，至少一段。
+// 校验期只查语法与 feature 存在性，路径存在性留给渲染期（冻结决策 5）。
+export const V3_BIND_PATTERN = /^feature:([A-Za-z_][A-Za-z0-9_]{0,63})((\.[A-Za-z_][A-Za-z0-9_]{0,63})|(\[\d+\]))+$/;
+
+// v3 新错误码登记（字面量仍分布在 validate.js，与现有风格一致）：
+//   E_V3_COMPONENTS_FORBIDDEN  顶层出现 components（组件树只存在于 presentation 内）
+//   E_FEATURE_UNKNOWN          featureId/bind 引用了不存在的功能
+//   E_FEATURE_UNREACHABLE      某 presentation 没有任何组件引用某功能
+//   E_TOKEN_DANGLING           style 值引用了不存在的令牌
+//   E_TOKEN_INVALID_CONTEXT    布局字段（size/position/layout/area）出现 $ 令牌引用
+//   E_TOKEN_UNKNOWN_OVERRIDE   variant overrides.tokens 新增了基础风格没有的令牌键
+//   E_ACTION_TARGET_INVALID    actions 结构非法，或目标不是本 presentation 内 initiallyOpen:false 的容器
+//   E_VARIANT_UNKNOWN          variant 引用的 presentation/style 不存在，或 activeVariant 悬空
+//   E_V3_SECTION_READONLY      updateDocument 试图修改 v3 只读段
+//   E_FEATURE_INVALID / E_STYLE_INVALID / E_PRESENTATION_INVALID / E_VARIANT_INVALID
+//                              features/styles/presentations/variants 段的结构错误
+
+// ---------- v3 最小工厂（供后续模块使用；字段全部显式传入，不留隐式默认） ----------
+// feature/style 以 id 为键存入对应表，工厂返回表项本体；variant 是数组项，id 在对象内。
+export function createFeature(id, label, data) {
+  if (!ID_PATTERN.test(id)) throw new Error('feature id 不合法：' + JSON.stringify(id));
+  if (typeof label !== 'string' || !label.trim()) throw new Error('feature label 需为非空字符串');
+  return { label, data }; // data 必须显式给出（不需要内容时传 {}）
+}
+
+export function createStyle(id, label, tokens) {
+  if (!ID_PATTERN.test(id)) throw new Error('style id 不合法：' + JSON.stringify(id));
+  if (typeof label !== 'string' || !label.trim()) throw new Error('style label 需为非空字符串');
+  return { label, tokens }; // tokens 必须显式给出（可为 {}）
+}
+
+export function createVariant(id, label, presentation, style, overrides) {
+  if (!ID_PATTERN.test(id)) throw new Error('variant id 不合法：' + JSON.stringify(id));
+  if (typeof label !== 'string' || !label.trim()) throw new Error('variant label 需为非空字符串');
+  return { id, label, presentation, style, overrides }; // overrides 必须显式给出（可为 { tokens: {}, components: {} }）
+}
 
 // ---------- 组件类型 ----------
 export const COMPONENT_TYPES = {

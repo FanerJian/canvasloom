@@ -1,18 +1,19 @@
 // ============================================================
-// UIDoc v1/v2 兼容层 —— 浏览器与 Node 通用（禁止 import node:fs）
-// 规则（与 README「版本与迁移」一致）：
-//   · 新版读取 v1 与 v2；v1 打开时在内存补齐兼容语义，读取本身不写盘。
+// UIDoc v1/v2/v3 兼容层 —— 浏览器与 Node 通用（禁止 import node:fs）
+// 规则（与 README「版本与迁移」及商业级路线图 §4 决策 10 一致）：
+//   · 新版读取 v1、v2 与 v3；v1 打开时在内存补齐兼容语义，读取本身不写盘。
 //   · 旧项目第一次由新版明确保存时，先做 v1 备份（shared/backup.js，Node 侧），再写 v2。
 //   · 迁移只升版本号，不改 ID、父子关系、资源、布局语义、修订号；
 //     v2 的新能力（独立定位、扩展样式等）由校验器/渲染器按默认语义解释，不靠迁移批量写字段。
+//   · v3 原样通过：内存中不升级、不改形、不降级写回 v2（升 v3 只发生在用户明确使用新能力时）。
 //   · 更高的版本号不支持：明确报错，不自动降级、不丢弃字段。
 // ============================================================
-import { DOC_VERSION, findComponent } from './protocol.js';
+import { DOC_VERSION, DOC_VERSION_V3, findComponent } from './protocol.js';
 
-export const SUPPORTED_VERSIONS = [1, 2];
+export const SUPPORTED_VERSIONS = [1, 2, 3];
 
 export function isSupportedVersion(v) {
-  return v === 1 || v === 2;
+  return v === 1 || v === 2 || v === DOC_VERSION_V3;
 }
 
 export class CompatError extends Error {
@@ -27,16 +28,18 @@ export function inspectDocVersion(doc) {
   const v = doc.version;
   if (!isSupportedVersion(v)) {
     throw new CompatError('E_VERSION_UNSUPPORTED',
-      `不支持的文档版本：${JSON.stringify(v)}（本版本支持 1 与 2）。文件保持原样未改动，请用与该版本匹配的程序打开。`);
+      `不支持的文档版本：${JSON.stringify(v)}（本版本支持 1、2 与 3）。文件保持原样未改动，请用与该版本匹配的程序打开。`);
   }
   return { version: v, supported: true };
 }
 
-// v1 → v2 内存升级（深拷贝，不动原对象）。v2 原样返回深拷贝。
+// 打开文档前的内存准备（深拷贝，不动原对象）：
+//   v3 → 原样返回（不升级不改形）；v2 → 原样返回深拷贝；v1 → 仅升版本号为 v2。
 // 升级是纯语义保持操作：除 version 字段外内容完全一致。
 export function upgradeDoc(doc) {
   inspectDocVersion(doc);
   const next = JSON.parse(JSON.stringify(doc));
+  if (doc.version === DOC_VERSION_V3) return next; // v3 原样通过
   if (doc.version === DOC_VERSION) return next;
   // v1 升 v2：只改版本号。结构合法性交给 validateDoc（调用方保存前会校验）。
   next.version = DOC_VERSION;
