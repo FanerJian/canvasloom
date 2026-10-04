@@ -1,9 +1,13 @@
 // ============================================================
-// UIDoc v1 自包含预览页生成器
+// UIDoc 自包含预览页生成器
 // 三种运行模式（按 URL 参数自动判定）：
 //   ?embed=1   编辑器 iframe 内嵌：监听 postMessage 测量请求，回传快照
 //   ?static=1  无头渲染：按窗口大小渲染；&dump=1 时把快照 JSON 写入 <pre id="dump-output">
 //   （默认）    独立交互页：视口选择 + 测量 + 截图（html2canvas）+ 快照下载
+// v3 文档：按变体（页面注入的 UIFORGE_VARIANT 或 activeVariant）解析成 v2 形状
+//          再渲染，并接入交互运行时（toggle/open/close、Esc、遮罩、焦点回归）；
+//          内联顺序 modes→protocol→resolve→runtime→renderer（inlineModule 剥
+//          import/export，多个 <script> 依序共享全局作用域，顺序即依赖）。
 // ============================================================
 
 function esc(s) { return String(s).replace(/<\/script/gi, '<\\/script'); }
@@ -28,11 +32,62 @@ const BOOTSTRAP = String.raw`
   // 独立交互页只有 #frame（视口容器），内嵌/静态页用 #app；统一解析
   var app = document.getElementById('app') || document.getElementById('frame');
 
+  // v3 文档先按变体解析成 v2 形状再渲染（v2 文档原样渲染，行为与今天完全一致）：
+  // 变体 = 页面注入的 UIFORGE_VARIANT（CLI --variant）或文档的 activeVariant。
+  // 解析/渲染失败在页面上显示明确错误卡（错误码+信息），绝不白屏。
+  function showRenderError(e) {
+    app.textContent = '';
+    var card = document.createElement('div');
+    card.style.cssText = 'margin:48px auto;max-width:560px;padding:20px 24px;border:1px solid #fca5a5;'
+      + 'border-radius:8px;background:#fef2f2;color:#7f1d1d;font:14px/1.9 system-ui,"Microsoft YaHei",sans-serif;';
+    var head = document.createElement('div');
+    head.textContent = '✗ 渲染失败';
+    head.style.cssText = 'font-weight:bold;font-size:15px;margin-bottom:8px;';
+    var code = document.createElement('div');
+    code.textContent = '错误码：' + (e && e.code ? e.code : 'E_RENDER');
+    var msg = document.createElement('div');
+    msg.textContent = '信息：' + (e && e.message ? e.message : String(e));
+    card.appendChild(head); card.appendChild(code); card.appendChild(msg);
+    app.appendChild(card);
+  }
+
   function renderAt(w, h) {
-    if (window.UIForgeRenderer && window.UIForgeRenderer.renderDoc) {
-      return window.UIForgeRenderer.renderDoc(app, DOC, { viewport: { width: w, height: h }, editable: MODE !== 'static' });
+    try {
+      var docToRender = DOC;
+      if (DOC.version === 3) {
+        if (!(window.UIForgeResolve && typeof window.UIForgeResolve.resolveVariant === 'function')) {
+          var err0 = new Error('变体解析器（shared/resolve.js）未随页面加载，无法渲染 v3 文档');
+          err0.code = 'E_RESOLVE_SOURCE_MISSING';
+          throw err0;
+        }
+        var vid = (typeof window.UIFORGE_VARIANT !== 'undefined' && window.UIFORGE_VARIANT) || DOC.activeVariant;
+        docToRender = window.UIForgeResolve.resolveVariant(DOC, vid);
+      }
+      if (window.UIForgeRenderer && window.UIForgeRenderer.renderDoc) {
+        return window.UIForgeRenderer.renderDoc(app, docToRender, { viewport: { width: w, height: h }, editable: MODE !== 'static' });
+      }
+      throw new Error('renderer missing');
+    } catch (e) {
+      showRenderError(e);
+      return null;
     }
-    throw new Error('renderer missing');
+  }
+
+  // v3 渲染成功后接入交互运行时（toggle/open/close、Esc、遮罩、焦点回归）；
+  // spec 从原 v3 文档提取（overrides 只动 style，直接读 presentation 组件树）。
+  // v2 文档不 init runtime；static 模式是无头测量，保持完整设计可见性。
+  var runtime = null;
+  function setupInteractions() {
+    if (runtime) { runtime.destroy(); runtime = null; }
+    if (DOC.version !== 3 || MODE === 'static') return;
+    if (!(window.UIForgeRuntime && typeof window.UIForgeRuntime.initInteractions === 'function')) return;
+    var vid = (typeof window.UIFORGE_VARIANT !== 'undefined' && window.UIFORGE_VARIANT) || DOC.activeVariant;
+    var rootEl = app.firstElementChild;
+    if (!rootEl) return;
+    var spec = typeof window.UIForgeRuntime.extractInteractionSpec === 'function'
+      ? window.UIForgeRuntime.extractInteractionSpec(DOC, vid)
+      : { initiallyClosed: [], actions: {} };
+    runtime = window.UIForgeRuntime.initInteractions({ rootEl: rootEl, spec: spec });
   }
 
   function waitImages(root) {
@@ -95,10 +150,10 @@ const BOOTSTRAP = String.raw`
           window.parent.postMessage({ type: 'uiforge:error', message: String(e && e.message || e) }, '*');
         });
       } else if (d.type === 'uiforge:render') {
-        renderAt(d.width || window.innerWidth, d.height || window.innerHeight);
+        if (renderAt(d.width || window.innerWidth, d.height || window.innerHeight)) setupInteractions();
       }
     });
-    renderAt(window.innerWidth, window.innerHeight);
+    if (renderAt(window.innerWidth, window.innerHeight)) setupInteractions();
     return;
   }
 
@@ -148,7 +203,7 @@ const BOOTSTRAP = String.raw`
     frame.style.width = v.width + 'px';
     frame.style.height = v.height + 'px';
     document.getElementById('viewport-label').textContent = '当前视口：' + v.label + '　修订号：' + DOC.revision;
-    renderAt(v.width, v.height);
+    if (renderAt(v.width, v.height)) setupInteractions();
   }
   sel.addEventListener('change', function () { applyViewport(); });
   document.getElementById('btn-rerender').addEventListener('click', applyViewport);
@@ -189,7 +244,7 @@ const BOOTSTRAP = String.raw`
 })();
 `;
 
-export function buildPreviewHtml({ doc, modesSource, protocolSource, rendererSource, html2canvasSource, title }) {
+export function buildPreviewHtml({ doc, modesSource, protocolSource, resolveSource, runtimeSource, rendererSource, html2canvasSource, title, variantId }) {
   const t = title || (doc && doc.name) || 'UIForge 预览';
   return `<!doctype html>
 <html lang="zh-CN">
@@ -214,8 +269,14 @@ export function buildPreviewHtml({ doc, modesSource, protocolSource, rendererSou
 <script>${html2canvasSource ? esc(html2canvasSource) : ''}</script>
 <script>${esc(inlineModule(modesSource || ''))}</script>
 <script>${esc(inlineModule(protocolSource || ''))}</script>
+<script>${esc(inlineModule(resolveSource || ''))}</script>
+<script>${esc(inlineModule(runtimeSource || ''))}</script>
 <script>${esc(inlineModule(rendererSource || ''))}</script>
 <script>window.UIForgeRenderer = { renderDoc: typeof renderDoc === 'function' ? renderDoc : null };</script>
+<script>window.UIForgeResolve = { resolveVariant: typeof resolveVariant === 'function' ? resolveVariant : null };</script>
+<script>window.UIForgeRuntime = { initInteractions: typeof initInteractions === 'function' ? initInteractions : null,
+  extractInteractionSpec: typeof extractInteractionSpec === 'function' ? extractInteractionSpec : null };</script>
+<script>window.UIFORGE_VARIANT = ${jsonForScript(variantId)};</script>
 </head>
 <body>
 <div id="bar">
@@ -239,8 +300,8 @@ export function buildPreviewHtml({ doc, modesSource, protocolSource, rendererSou
 `;
 }
 
-// 供编辑器 srcdoc 使用的精简内嵌页（只含渲染 + 测量协议）
-export function buildEmbedHtml({ doc, modesSource, protocolSource, rendererSource, viewport }) {
+// 供编辑器 srcdoc 使用的精简内嵌页（只含渲染 + 测量协议；v3 文档附加变体解析与交互运行时）
+export function buildEmbedHtml({ doc, modesSource, protocolSource, resolveSource, runtimeSource, rendererSource, viewport }) {
   const vp = viewport || { width: doc.canvas.width, height: doc.canvas.height };
   return `<!doctype html>
 <html lang="zh-CN">
@@ -251,8 +312,13 @@ export function buildEmbedHtml({ doc, modesSource, protocolSource, rendererSourc
 </style>
 <script>${esc(inlineModule(modesSource || ''))}</script>
 <script>${esc(inlineModule(protocolSource || ''))}</script>
+<script>${esc(inlineModule(resolveSource || ''))}</script>
+<script>${esc(inlineModule(runtimeSource || ''))}</script>
 <script>${esc(inlineModule(rendererSource || ''))}</script>
 <script>window.UIForgeRenderer = { renderDoc: typeof renderDoc === 'function' ? renderDoc : null };</script>
+<script>window.UIForgeResolve = { resolveVariant: typeof resolveVariant === 'function' ? resolveVariant : null };</script>
+<script>window.UIForgeRuntime = { initInteractions: typeof initInteractions === 'function' ? initInteractions : null,
+  extractInteractionSpec: typeof extractInteractionSpec === 'function' ? extractInteractionSpec : null };</script>
 </head>
 <body>
 <div id="app"></div>

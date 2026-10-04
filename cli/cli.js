@@ -5,7 +5,7 @@
 //   inspect  <项目|路径> [id]     读取组件树、布局规则和指定组件信息
 //   apply    <项目|路径> --ops f  按组件 ID 批量原子提交增改移删（校验失败整体拒绝）
 //   validate <项目|路径>          检查文件结构及（可选）实际预览布局
-//   export   <项目|路径>          导出设计文件、自包含预览页与检查报告
+//   export   <项目|路径>          导出设计文件、自包含预览页与检查报告（v3 可 --variant 指定变体）
 // ============================================================
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -36,6 +36,7 @@ for (let i = 0; i < argv.length; i++) {
   else if (a === '--base-revision') flags.baseRevision = parseInt(argv[++i], 10);
   else if (a === '--snapshot') flags.snapshot = argv[++i];
   else if (a === '--out') flags.out = argv[++i];
+  else if (a === '--variant') flags.variant = argv[++i];
   else positional.push(a);
 }
 const cmd = positional.shift();
@@ -55,7 +56,7 @@ function usage() {
   cli.cmd inspect <项目名|文件路径> [组件ID] [--json]
   cli.cmd apply   <项目名|文件路径> --ops <ops.json> [--base-revision N] [--json]
   cli.cmd validate <项目名|文件路径> [--snapshot snapshot.json] [--json]
-  cli.cmd export  <项目名|文件路径> [--out 目录] [--json]
+  cli.cmd export  <项目名|文件路径> [--out 目录] [--variant <id>] [--json]
 
 操作格式（apply 的 ops.json）：
   { "ops": [
@@ -70,6 +71,9 @@ function usage() {
   · baseRevision 必填：声明"我基于哪个修订号修改"，不匹配即拒绝（E_REVISION_STALE），
     防止覆盖主人或他人刚完成的修改；服务端与 CLI 的写入共用同一把项目文件锁；
   · 导出包中的 preview.html 双击即可打开：含"测量布局 / 下载快照 / 截图"按钮；
+  · v3 文档导出时页面内嵌变体解析器与交互运行时（按钮可点开/关面板）：
+    缺省按 activeVariant 渲染，--variant <id> 可指定其他变体（不存在即报错），
+    v2 文档不支持 --variant（E_VARIANT_FLAG_ON_V2）；
   · validate --snapshot 会先做快照有效性门禁（修订号一致、组件覆盖完整、坐标类型合法），
     再做实测检查（溢出、越界、重叠、固定尺寸与位置与设计规则的一致性）。`);
   process.exit(3);
@@ -88,7 +92,7 @@ function resolveProject(arg) {
   if (doc.format !== 'uidoc') fail('E_FORMAT', '不是 UIDoc 文档：' + file);
   if (!isSupportedVersion(doc.version)) {
     fail('E_VERSION_UNSUPPORTED',
-      `不支持的文档版本：${JSON.stringify(doc.version)}（本 CLI 支持 1 与 2）。文件保持原样未改动，请用与该版本匹配的程序处理：${file}`);
+      `不支持的文档版本：${JSON.stringify(doc.version)}（本 CLI 支持 1、2 与 3）。文件保持原样未改动，请用与该版本匹配的程序处理：${file}`);
   }
   return { file, doc };
 }
@@ -320,6 +324,22 @@ async function validate() {
 async function exportProj() {
   const arg = positional[0];
   const { doc } = resolveProject(arg);
+  // M4：--variant 只对 v3 文档有意义；显式给出即显式校验，绝不静默忽略。
+  // 变体存在性在这里校验（读 doc.variants），页面里的解析器只做最终把关。
+  let variantId = null;
+  if ('variant' in flags) {
+    if (doc.version !== 3) {
+      fail('E_VARIANT_FLAG_ON_V2', `--variant 只支持 v3 文档（当前文档版本 ${doc.version}），未导出`);
+    }
+    const ids = (Array.isArray(doc.variants) ? doc.variants : []).map((v) => (v && v.id != null ? String(v.id) : null)).filter(Boolean);
+    if (typeof flags.variant !== 'string' || !flags.variant || !ids.includes(flags.variant)) {
+      fail('E_VARIANT_UNKNOWN',
+        `变体 ${JSON.stringify(flags.variant == null ? null : flags.variant)} 不存在于 variants（可用：${ids.join('、') || '文档缺少 variants 变体清单'}），未导出`,
+        { available: ids });
+    }
+    variantId = flags.variant;
+  }
+  const effectiveVariant = doc.version === 3 ? (variantId || doc.activeVariant || null) : null;
   // 先校验再创建任何文件：非法文档直接结构化拒绝，不留下半成品导出包
   const staticReport = validateDoc(doc);
   if (!staticReport.ok) {
@@ -335,14 +355,19 @@ async function exportProj() {
   const files = [];
   await fsp.writeFile(path.join(dir, 'design.uidoc.json'), JSON.stringify(doc, null, 2), 'utf8'); files.push('design.uidoc.json');
 
-  let rendererSource, protocolSource, h2cSource = '';
+  let rendererSource, protocolSource, resolveSource, runtimeSource, h2cSource = '';
   try { rendererSource = await fsp.readFile(path.join(ROOT, 'shared', 'renderer.js'), 'utf8'); }
   catch (e) { fail('E_EXPORT', '读取渲染器失败：' + e.message); }
   try { protocolSource = await fsp.readFile(path.join(ROOT, 'shared', 'protocol.js'), 'utf8'); }
   catch (e) { fail('E_EXPORT', '读取协议库失败：' + e.message); }
+  // v3 页面按变体解析 + 交互（按钮可点）必需这两个模块；读不到就明确报错，不许静默降级
+  try { resolveSource = await fsp.readFile(path.join(ROOT, 'shared', 'resolve.js'), 'utf8'); }
+  catch (e) { fail('E_EXPORT', '读取变体解析器（shared/resolve.js）失败：' + e.message); }
+  try { runtimeSource = await fsp.readFile(path.join(ROOT, 'shared', 'runtime.js'), 'utf8'); }
+  catch (e) { fail('E_EXPORT', '读取交互运行时（shared/runtime.js）失败：' + e.message); }
   try { h2cSource = await fsp.readFile(path.join(ROOT, 'vendor', 'html2canvas.min.js'), 'utf8'); } catch { /* 可选 */ }
   await fsp.writeFile(path.join(dir, 'preview.html'),
-    buildPreviewHtml({ doc, protocolSource, rendererSource, html2canvasSource: h2cSource }), 'utf8');
+    buildPreviewHtml({ doc, protocolSource, resolveSource, runtimeSource, rendererSource, html2canvasSource: h2cSource, variantId }), 'utf8');
   files.push('preview.html');
 
   await fsp.writeFile(path.join(dir, '使用说明.txt'), [
@@ -353,19 +378,22 @@ async function exportProj() {
     '                     - 测量布局：输出每个组件的实际位置尺寸',
     '                     - 下载快照：保存 snapshot.json（供 cli.cmd validate --snapshot 复检）',
     '                     - 截图：保存 PNG（基于 html2canvas）',
-    '· report.json        结构检查报告（静态校验结果）',
+    effectiveVariant ? '                     - 交互：带 actions 的按钮可点击开/关面板（Esc 关闭、点外部关闭）\n                       本次按变体 ' + effectiveVariant + ' 渲染' : '',
+    '· report.json        结构检查报告（静态校验结果' + (effectiveVariant ? '，含本次渲染的变体' : '') + '）',
     '',
     '如需包含实测快照与截图的一键导出，请在编辑器中点"导出"。',
-  ].join('\n'), 'utf8');
+  ].filter(Boolean).join('\n'), 'utf8');
   files.push('使用说明.txt');
 
   const staticReport2 = staticReport; // 已在函数开头完成校验
   const report = { generatedAt: ts.toISOString(), tool: 'uiforge-cli', static: staticReport2,
     errors: staticReport2.errors, warnings: staticReport2.warnings };
+  if (effectiveVariant) report.variant = effectiveVariant; // v3：记录本次导出实际渲染的变体
   await fsp.writeFile(path.join(dir, 'report.json'), JSON.stringify(report, null, 2), 'utf8'); files.push('report.json');
 
-  out({ ok: true, dir, files, errors: report.errors.length, warnings: report.warnings.length },
+  out({ ok: true, dir, files, errors: report.errors.length, warnings: report.warnings.length, variant: effectiveVariant || undefined },
     `✓ 导出完成：${dir}\n  文件：${files.join('、')}\n` +
+    (effectiveVariant ? `  渲染变体：${effectiveVariant}\n` : '') +
     (report.errors.length ? `  ⚠ 检查发现 ${report.errors.length} 个错误、${report.warnings.length} 个警告（详见 report.json）\n` : '  结构检查通过，无错误。\n') +
     '  ※ 快照与截图：打开 preview.html 点"测量布局/截图"，或使用编辑器的"导出"。');
 }

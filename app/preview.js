@@ -6,7 +6,7 @@ import { renderDoc } from '../shared/renderer.js';
 import { validateDoc } from '../shared/validate.js';
 import { checkSnapshot } from '../shared/measure.js';
 import { buildEmbedHtml } from '../shared/export-html.js';
-import { loadRendererSource, loadModesSource, loadProtocolSource, exportBundle } from './api.js';
+import { loadRendererSource, loadModesSource, loadProtocolSource, loadResolveSource, loadRuntimeSource, exportBundle } from './api.js';
 import { openModal, closeModal, toast } from './panels.js';
 
 const VIEWPORTS = [
@@ -39,8 +39,14 @@ async function buildPreviewFrame() {
   const vp = state.previewViewport || [state.doc.canvas.width, state.doc.canvas.height];
   frame.style.width = vp[0] + 'px';
   frame.style.height = vp[1] + 'px';
-  const [src, protoSrc, modesSrc] = await Promise.all([loadRendererSource(), loadProtocolSource(), loadModesSource()]);
-  frame.srcdoc = buildEmbedHtml({ doc: state.doc, modesSource: modesSrc, protocolSource: protoSrc, rendererSource: src });
+  const [src, protoSrc, modesSrc, resolveSrc, runtimeSrc] = await Promise.all([
+    loadRendererSource(), loadProtocolSource(), loadModesSource(), loadResolveSource(), loadRuntimeSource(),
+  ]);
+  // v3 文档：内嵌变体解析器与交互运行时，预览页与导出页行为一致（按钮可点开/关面板）
+  frame.srcdoc = buildEmbedHtml({
+    doc: state.doc, modesSource: modesSrc, protocolSource: protoSrc,
+    resolveSource: resolveSrc, runtimeSource: runtimeSrc, rendererSource: src,
+  });
   const label = document.getElementById('pv-label');
   if (label) label.textContent = `视口 ${vp[0]} × ${vp[1]} · 修订号 ${state.revision}`;
 }

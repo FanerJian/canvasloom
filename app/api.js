@@ -49,6 +49,8 @@ export function connectEvents(handler) {
 let rendererSrcPromise = null;
 let protocolSrcPromise = null;
 let modesSrcPromise = null;
+let resolveSrcPromise = null;
+let runtimeSrcPromise = null;
 export function loadRendererSource() {
   if (!rendererSrcPromise) rendererSrcPromise = fetch('/shared/renderer.js').then((r) => r.text());
   return rendererSrcPromise;
@@ -60,4 +62,13 @@ export function loadModesSource() {
 export function loadProtocolSource() {
   if (!protocolSrcPromise) protocolSrcPromise = fetch('/shared/protocol.js').then((r) => r.text());
   return protocolSrcPromise;
+}
+// v3 预览需要变体解析器与交互运行时：与 renderer/protocol 同法内联进 srcdoc
+export function loadResolveSource() {
+  if (!resolveSrcPromise) resolveSrcPromise = fetch('/shared/resolve.js').then((r) => r.text());
+  return resolveSrcPromise;
+}
+export function loadRuntimeSource() {
+  if (!runtimeSrcPromise) runtimeSrcPromise = fetch('/shared/runtime.js').then((r) => r.text());
+  return runtimeSrcPromise;
 }
