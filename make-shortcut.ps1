@@ -1,9 +1,10 @@
-﻿# 为 UIForge 生成图标 + 桌面快捷方式
+# 为 CanvasLoom 生成图标 + 桌面快捷方式
 $ErrorActionPreference = 'Stop'
-$root = 'D:\UIForge'
+# 脚本自定位：放在仓库根即可用，不依赖固定的安装路径
+$root = Split-Path -Parent $PSCommandPath
 
 # ---- 1. 生成图标（蓝底圆角 + 白色三角，与应用 logo 一致）----
-$icoPath = Join-Path $root 'uiforge.ico'
+$icoPath = Join-Path $root 'canvasloom.ico'
 try {
   Add-Type -AssemblyName System.Drawing
   $bmp = New-Object System.Drawing.Bitmap 64, 64
@@ -40,14 +41,14 @@ try {
 
 # ---- 2. 创建桌面快捷方式（指向 VBS 静默启动器，全程无黑窗口）----
 $desktop = [Environment]::GetFolderPath('Desktop')
-$lnkPath = Join-Path $desktop '界面工坊 UIForge.lnk'
+$lnkPath = Join-Path $desktop '界面工坊 CanvasLoom.lnk'
 $ws = New-Object -ComObject WScript.Shell
 $lnk = $ws.CreateShortcut($lnkPath)
 $lnk.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
 $lnk.Arguments = '"' + (Join-Path $root '启动编辑器.vbs') + '"'
 $lnk.WorkingDirectory = $root
 $lnk.IconLocation = "$icoPath,0"
-$lnk.Description = 'UIForge 界面工坊：本地可视化 UI 布局编辑器（127.0.0.1:8520）'
+$lnk.Description = 'CanvasLoom 界面工坊：本地可视化 UI 布局编辑器（127.0.0.1:8520）'
 $lnk.WindowStyle = 7   # 最小化启动，不挡桌面
 $lnk.Save()
 Write-Output "lnk: $lnkPath"

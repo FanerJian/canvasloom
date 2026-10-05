@@ -5,9 +5,9 @@ import { findComponent, isContainer, ancestorsOf, LIMITS } from '../shared/proto
 import { resolveVariant } from '../shared/resolve.js';
 
 // 缩放/吸附等视图偏好的持久化键（画布行为偏好不进设计文档）
-const PREF_SNAP = 'uiforge:snap';
-const PREF_FREE_MOVE = 'uiforge:freeMove';
-const PREF_SHOW_OUTSIDE = 'uiforge:showOutside';
+const PREF_SNAP = 'canvasloom:snap';
+const PREF_FREE_MOVE = 'canvasloom:freeMove';
+const PREF_SHOW_OUTSIDE = 'canvasloom:showOutside';
 function prefOn(key, def = true) {
   try { const v = localStorage.getItem(key); return v == null ? def : v === '1'; } catch { return def; }
 }
@@ -90,7 +90,7 @@ export const history = { undo: [], redo: [] };
 const MAX_HISTORY = 100;
 
 // 组件库/预设块拖入画布的自定义 MIME（dragover 期间只读 types，drop 时才能读数据）
-export const PALETTE_MIME = 'application/x-uiforge';
+export const PALETTE_MIME = 'application/x-canvasloom';
 
 const listeners = new Set();
 export function on(fn) { listeners.add(fn); return () => listeners.delete(fn); }

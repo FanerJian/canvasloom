@@ -1,5 +1,5 @@
 // ============================================================
-// UIForge M2 变体解析器 —— v3 文档的指定 variant → v2 形状文档
+// CanvasLoom M2 变体解析器 —— v3 文档的指定 variant → v2 形状文档
 // resolveVariant(doc, variantId) 产出可直接进入既有渲染/测量/校验/导出管线的
 // v2 形状文档（format:"uidoc"、version:2；canvas/resources/mode/name/revision
 // 照抄原文档，components 为解析后的组件树）：

@@ -1,9 +1,9 @@
 {
-  "name": "uiforge",
+  "name": "canvasloom",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "UIForge 界面工坊：可视化 UI 布局编辑器，人与 agent 共用一份 UIDoc 设计文档",
+  "description": "CanvasLoom 界面工坊：可视化 UI 布局编辑器，人与 agent 共用一份 UIDoc 设计文档",
   "scripts": {
     "test": "node --test \"tests/*.test.js\""
   }

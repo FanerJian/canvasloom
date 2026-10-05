@@ -4,7 +4,7 @@
 //   ?embed=1   编辑器 iframe 内嵌：监听 postMessage 测量请求，回传快照
 //   ?static=1  无头渲染：按窗口大小渲染；&dump=1 时把快照 JSON 写入 <pre id="dump-output">
 //   （默认）    独立交互页：视口选择 + 测量 + 截图（html2canvas）+ 快照下载
-// v3 文档：按变体（页面注入的 UIFORGE_VARIANT 或 activeVariant）解析成 v2 形状
+// v3 文档：按变体（页面注入的 CANVASLOOM_VARIANT 或 activeVariant）解析成 v2 形状
 //          再渲染，并接入交互运行时（toggle/open/close、Esc、遮罩、焦点回归）；
 //          内联顺序 modes→protocol→resolve→runtime→renderer（inlineModule 剥
 //          import/export，多个 <script> 依序共享全局作用域，顺序即依赖）。
@@ -33,7 +33,7 @@ const BOOTSTRAP = String.raw`
   var app = document.getElementById('app') || document.getElementById('frame');
 
   // v3 文档先按变体解析成 v2 形状再渲染（v2 文档原样渲染，行为与今天完全一致）：
-  // 变体 = 页面注入的 UIFORGE_VARIANT（CLI --variant）或文档的 activeVariant。
+  // 变体 = 页面注入的 CANVASLOOM_VARIANT（CLI --variant）或文档的 activeVariant。
   // 解析/渲染失败在页面上显示明确错误卡（错误码+信息），绝不白屏。
   function showRenderError(e) {
     app.textContent = '';
@@ -55,16 +55,16 @@ const BOOTSTRAP = String.raw`
     try {
       var docToRender = DOC;
       if (DOC.version === 3) {
-        if (!(window.UIForgeResolve && typeof window.UIForgeResolve.resolveVariant === 'function')) {
+        if (!(window.CanvasLoomResolve && typeof window.CanvasLoomResolve.resolveVariant === 'function')) {
           var err0 = new Error('变体解析器（shared/resolve.js）未随页面加载，无法渲染 v3 文档');
           err0.code = 'E_RESOLVE_SOURCE_MISSING';
           throw err0;
         }
-        var vid = (typeof window.UIFORGE_VARIANT !== 'undefined' && window.UIFORGE_VARIANT) || DOC.activeVariant;
-        docToRender = window.UIForgeResolve.resolveVariant(DOC, vid);
+        var vid = (typeof window.CANVASLOOM_VARIANT !== 'undefined' && window.CANVASLOOM_VARIANT) || DOC.activeVariant;
+        docToRender = window.CanvasLoomResolve.resolveVariant(DOC, vid);
       }
-      if (window.UIForgeRenderer && window.UIForgeRenderer.renderDoc) {
-        return window.UIForgeRenderer.renderDoc(app, docToRender, { viewport: { width: w, height: h }, editable: MODE !== 'static' });
+      if (window.CanvasLoomRenderer && window.CanvasLoomRenderer.renderDoc) {
+        return window.CanvasLoomRenderer.renderDoc(app, docToRender, { viewport: { width: w, height: h }, editable: MODE !== 'static' });
       }
       throw new Error('renderer missing');
     } catch (e) {
@@ -80,14 +80,14 @@ const BOOTSTRAP = String.raw`
   function setupInteractions() {
     if (runtime) { runtime.destroy(); runtime = null; }
     if (DOC.version !== 3 || MODE === 'static') return;
-    if (!(window.UIForgeRuntime && typeof window.UIForgeRuntime.initInteractions === 'function')) return;
-    var vid = (typeof window.UIFORGE_VARIANT !== 'undefined' && window.UIFORGE_VARIANT) || DOC.activeVariant;
+    if (!(window.CanvasLoomRuntime && typeof window.CanvasLoomRuntime.initInteractions === 'function')) return;
+    var vid = (typeof window.CANVASLOOM_VARIANT !== 'undefined' && window.CANVASLOOM_VARIANT) || DOC.activeVariant;
     var rootEl = app.firstElementChild;
     if (!rootEl) return;
-    var spec = typeof window.UIForgeRuntime.extractInteractionSpec === 'function'
-      ? window.UIForgeRuntime.extractInteractionSpec(DOC, vid)
+    var spec = typeof window.CanvasLoomRuntime.extractInteractionSpec === 'function'
+      ? window.CanvasLoomRuntime.extractInteractionSpec(DOC, vid)
       : { initiallyClosed: [], actions: {} };
-    runtime = window.UIForgeRuntime.initInteractions({ rootEl: rootEl, spec: spec });
+    runtime = window.CanvasLoomRuntime.initInteractions({ rootEl: rootEl, spec: spec });
   }
 
   function waitImages(root) {
@@ -143,13 +143,13 @@ const BOOTSTRAP = String.raw`
   if (MODE === 'embed') {
     window.addEventListener('message', function (ev) {
       var d = ev.data || {};
-      if (d.type === 'uiforge:measure') {
+      if (d.type === 'canvasloom:measure') {
         measure(d.viewport).then(function (snap) {
-          window.parent.postMessage({ type: 'uiforge:measured', snapshot: snap }, '*');
+          window.parent.postMessage({ type: 'canvasloom:measured', snapshot: snap }, '*');
         }).catch(function (e) {
-          window.parent.postMessage({ type: 'uiforge:error', message: String(e && e.message || e) }, '*');
+          window.parent.postMessage({ type: 'canvasloom:error', message: String(e && e.message || e) }, '*');
         });
-      } else if (d.type === 'uiforge:render') {
+      } else if (d.type === 'canvasloom:render') {
         if (renderAt(d.width || window.innerWidth, d.height || window.innerHeight)) setupInteractions();
       }
     });
@@ -164,13 +164,13 @@ const BOOTSTRAP = String.raw`
       measure().then(function (snap) {
         var pre = document.createElement('pre');
         pre.id = 'dump-output';
-        pre.textContent = 'BEGIN_UIFORGE_SNAPSHOT\n' + JSON.stringify(snap) + '\nEND_UIFORGE_SNAPSHOT';
+        pre.textContent = 'BEGIN_CANVASLOOM_SNAPSHOT\n' + JSON.stringify(snap) + '\nEND_CANVASLOOM_SNAPSHOT';
         document.body.appendChild(pre);
-        document.title = 'UIFORGE_DUMP_OK';
+        document.title = 'CANVASLOOM_DUMP_OK';
       }).catch(function (e) {
         var pre = document.createElement('pre');
         pre.id = 'dump-output';
-        pre.textContent = 'BEGIN_UIFORGE_SNAPSHOT\n' + JSON.stringify({ error: String(e) }) + '\nEND_UIFORGE_SNAPSHOT';
+        pre.textContent = 'BEGIN_CANVASLOOM_SNAPSHOT\n' + JSON.stringify({ error: String(e) }) + '\nEND_CANVASLOOM_SNAPSHOT';
         document.body.appendChild(pre);
       });
     }
@@ -210,7 +210,7 @@ const BOOTSTRAP = String.raw`
   document.getElementById('btn-measure').addEventListener('click', function () {
     var v = currentViewport();
     measure(v).then(function (snap) {
-      window.__uiforgeSnapshot = snap;
+      window.__canvasloomSnapshot = snap;
       var out = document.getElementById('measure-out');
       out.style.display = 'block';
       var rows = [];
@@ -245,7 +245,7 @@ const BOOTSTRAP = String.raw`
 `;
 
 export function buildPreviewHtml({ doc, modesSource, protocolSource, resolveSource, runtimeSource, rendererSource, html2canvasSource, title, variantId }) {
-  const t = title || (doc && doc.name) || 'UIForge 预览';
+  const t = title || (doc && doc.name) || 'CanvasLoom 预览';
   return `<!doctype html>
 <html lang="zh-CN">
 <head>
@@ -272,15 +272,15 @@ export function buildPreviewHtml({ doc, modesSource, protocolSource, resolveSour
 <script>${esc(inlineModule(resolveSource || ''))}</script>
 <script>${esc(inlineModule(runtimeSource || ''))}</script>
 <script>${esc(inlineModule(rendererSource || ''))}</script>
-<script>window.UIForgeRenderer = { renderDoc: typeof renderDoc === 'function' ? renderDoc : null };</script>
-<script>window.UIForgeResolve = { resolveVariant: typeof resolveVariant === 'function' ? resolveVariant : null };</script>
-<script>window.UIForgeRuntime = { initInteractions: typeof initInteractions === 'function' ? initInteractions : null,
+<script>window.CanvasLoomRenderer = { renderDoc: typeof renderDoc === 'function' ? renderDoc : null };</script>
+<script>window.CanvasLoomResolve = { resolveVariant: typeof resolveVariant === 'function' ? resolveVariant : null };</script>
+<script>window.CanvasLoomRuntime = { initInteractions: typeof initInteractions === 'function' ? initInteractions : null,
   extractInteractionSpec: typeof extractInteractionSpec === 'function' ? extractInteractionSpec : null };</script>
-<script>window.UIFORGE_VARIANT = ${jsonForScript(variantId)};</script>
+<script>window.CANVASLOOM_VARIANT = ${jsonForScript(variantId)};</script>
 </head>
 <body>
 <div id="bar">
-  <strong>UIForge 预览</strong>
+  <strong>CanvasLoom 预览</strong>
   <span id="viewport-label"></span>
   <select id="viewport-sel">
     ${['设计画布', '1280 × 800', '1024 × 768', '768 × 1024', '375 × 667'].map((label, i) => `<option value="${i}">${label}</option>`).join('')}
@@ -315,9 +315,9 @@ export function buildEmbedHtml({ doc, modesSource, protocolSource, resolveSource
 <script>${esc(inlineModule(resolveSource || ''))}</script>
 <script>${esc(inlineModule(runtimeSource || ''))}</script>
 <script>${esc(inlineModule(rendererSource || ''))}</script>
-<script>window.UIForgeRenderer = { renderDoc: typeof renderDoc === 'function' ? renderDoc : null };</script>
-<script>window.UIForgeResolve = { resolveVariant: typeof resolveVariant === 'function' ? resolveVariant : null };</script>
-<script>window.UIForgeRuntime = { initInteractions: typeof initInteractions === 'function' ? initInteractions : null,
+<script>window.CanvasLoomRenderer = { renderDoc: typeof renderDoc === 'function' ? renderDoc : null };</script>
+<script>window.CanvasLoomResolve = { resolveVariant: typeof resolveVariant === 'function' ? resolveVariant : null };</script>
+<script>window.CanvasLoomRuntime = { initInteractions: typeof initInteractions === 'function' ? initInteractions : null,
   extractInteractionSpec: typeof extractInteractionSpec === 'function' ? extractInteractionSpec : null };</script>
 </head>
 <body>

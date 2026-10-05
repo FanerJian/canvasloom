@@ -79,7 +79,7 @@ function renderAll(detail = {}) {
   renderToolbarState();
   renderVariantMenu();
   // 调试/自动化检查出口（只读快照）
-  window.__uiforge = {
+  window.__canvasloom = {
     name: state.name, revision: state.revision, dirty: state.dirty,
     mode: state.mode, selection: state.selection, doc: state.doc,
     view: viewDoc(), viewError: state.viewError || null,
@@ -107,7 +107,7 @@ async function openProjectByName(name, { silent } = {}) {
     return false;
   }
   loadProject(name, doc);
-  localStorage.setItem('uiforge:last', name);
+  localStorage.setItem('canvasloom:last', name);
   if (!silent) toast(`已打开「${name}」（修订号 ${doc.revision}）`, 'ok');
   return true;
 }
@@ -196,7 +196,7 @@ async function showNewDialog() {
       if (!r.ok) { toast('创建失败：' + (r.error || '未知错误'), 'bad'); return; }
       closeModal();
       loadProject(name, r.doc);
-      localStorage.setItem('uiforge:last', name);
+      localStorage.setItem('canvasloom:last', name);
       toast(`已创建「${name}」（${UI_MODES[chosen].label} · ${startLayout === 'free' ? '自由摆放' : '自动排列'}）`, 'ok');
     }],
   ]);
@@ -323,7 +323,7 @@ function showShortcuts() {
 }
 
 // ---------- 面板开合记忆（localStorage；首次无存档默认左右都收起——打开即画布） ----------
-const PANELS_KEY = 'uiforge.panels';
+const PANELS_KEY = 'canvasloom.panels';
 function loadPanelPrefs() {
   let saved = null;
   try { saved = JSON.parse(localStorage.getItem(PANELS_KEY) || 'null'); } catch { saved = null; }
@@ -498,7 +498,7 @@ async function boot() {
   initKeys();
   on(renderAll);
 
-  const last = localStorage.getItem('uiforge:last');
+  const last = localStorage.getItem('canvasloom:last');
   let opened = false;
   if (last) opened = await openProjectByName(last, { silent: true });
   if (!opened) {

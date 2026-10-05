@@ -155,7 +155,7 @@ test('CLI catalog / inspect / offline export 保留并渲染 placement', () => {
   comp.placement = { mode: 'absolute' };
   comp.position = { left: -8, top: 15 };
   comp.size = { width: { mode: 'fixed', value: 90 }, height: { mode: 'fixed', value: 36 } };
-  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'uiforge-free-move-'));
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'canvasloom-free-move-'));
   const input = path.join(tempDir, 'placement.uidoc.json');
   const output = path.join(tempDir, 'export');
   fs.writeFileSync(input, JSON.stringify(doc), 'utf8');

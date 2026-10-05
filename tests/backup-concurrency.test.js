@@ -12,7 +12,7 @@ import { withFileLock, lockFileFor } from '../shared/filelock.js';
 let tmpRoot = '';
 
 test.before(() => {
-  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'uiforge-test-'));
+  tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'canvasloom-test-'));
 });
 test.after(() => {
   if (tmpRoot) fs.rmSync(tmpRoot, { recursive: true, force: true });

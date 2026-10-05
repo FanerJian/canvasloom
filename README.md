@@ -1,11 +1,11 @@
-# 界面工坊 UIForge
+# 界面工坊 CanvasLoom
 
 本地运行的可视化 UI 布局编辑器：主人在画布上设计界面，编辑器把设计保存为**明确、版本化的布局规则**（UIDoc 文档）；agent 通过命令行读取同一份文件，即可知道每个组件的用途、位置和窗口变化时的排列方式，并能安全地修改。
 
 > 第一版目标：**主人能自由设计界面，agent 能准确读取设计，并通过实际预览检查布局是否符合要求。**
 
 - 技术形态：零依赖原生 ES 模块（浏览器与 Node 共用同一套渲染/校验代码），本地 HTTP 服务只监听 `127.0.0.1:8520`
-- 位置：`D:\UIForge`，数据（项目、导出、依赖）全部留在 D 盘
+- 纯本地工具：数据（项目、导出、依赖）全部留在本机，不联网、零遥测
 
 ---
 
@@ -13,7 +13,7 @@
 
 | 入口 | 说明 |
 |---|---|
-| 双击桌面快捷方式「界面工坊 UIForge」 | 静默启动本地服务（无黑窗口）并自动打开浏览器 |
+| 双击桌面快捷方式「界面工坊 CanvasLoom」 | 静默启动本地服务（无黑窗口）并自动打开浏览器 |
 | 双击 `启动编辑器.vbs` | 同上（快捷方式即指向它）；日志写入 `server.log` |
 | `启动编辑器.cmd` | 控制台调试启动：能看到服务日志，关窗口即退出 |
 | `停止编辑器.cmd` | 停止后台编辑器（只结束监听 8520 端口的进程） |
@@ -21,7 +21,7 @@
 | 命令行 `cli.cmd <命令>` | agent 读写入口（见下文） |
 
 ```
-D:\UIForge\
+<仓库根>\
 ├─ 启动编辑器.vbs        静默启动（无窗口）：起服务、等就绪、开浏览器
 ├─ 启动编辑器.cmd        控制台调试启动
 ├─ 停止编辑器.cmd        停止后台服务
@@ -128,7 +128,7 @@ UIDoc v2 组件可选 `placement:{mode:'absolute'|'flow'}`。`absolute` 可放�
 
 **v1 → v2 映射**：迁移是纯语义保持操作——只把 `version` 改为 2；组件 ID、父子关系、children 顺序、resources、canvas、布局语义、修订号全部原样保留。v2 的新能力（见后续版本的更新说明）由校验器与渲染器按默认语义解释，不依赖迁移批量补写字段。
 
-**回退**：需要退回旧版源码时，源码与数据分别处理——从 `D:\UIForge_备份\` 恢复旧源码**不要**覆盖 `projects\`；若某项目已写成 v2 而旧源码读不了，用 `projects\.v1-backups\` 里对应的 v1 备份替换该项目文件。
+**回退**：需要退回旧版源码时，源码与数据分别处理——从本地源码备份恢复旧源码**不要**覆盖 `projects\`；若某项目已写成 v2 而旧源码读不了，用 `projects\.v1-backups\` 里对应的 v1 备份替换该项目文件。
 
 **自动检查**：`npm test`（Node 自带测试器）覆盖迁移语义保持、版本拒绝、ops 原子性、v1 备份、修订号并发防覆盖。
 
@@ -150,7 +150,7 @@ v3 在 v2 之上加了一层「多方案」模型，用于**同一套界面的�
 }
 ```
 
-要点（完整冻结决策见 `D:\UIForge_P0\商业级路线图.md` §4）：
+要点：
 
 - **令牌引用**：组件 style 值写 `"$color.panel"`，渲染时替换为该变体所用风格的令牌值；布局字段（尺寸/位置）不允许 `$`。`overrides.tokens` 只允许微调基础风格已有的令牌键。
 - **功能绑定**：组件可选 `featureId`（指向 features）；text/button 可用 `bind.text: "feature:bag.items[0]"` 在渲染期直取功能数据做文案。
@@ -167,13 +167,13 @@ v3 在 v2 之上加了一层「多方案」模型，用于**同一套界面的�
 ## agent 使用（cli.cmd）
 
 ```bat
-D:\UIForge\cli.cmd catalog                                  :: 支持的组件/属性/布局模式
-D:\UIForge\cli.cmd inspect 示例页面                          :: 组件树 + 每个组件的布局规则
-D:\UIForge\cli.cmd inspect 示例页面 save_button --json       :: 指定组件完整定义
-D:\UIForge\cli.cmd apply 示例页面 --ops ops.json             :: 批量原子修改
-D:\UIForge\cli.cmd validate 示例页面 [--snapshot 快照.json]   :: 结构检查（+实测检查）
-D:\UIForge\cli.cmd export 示例页面                           :: 导出包
-D:\UIForge\cli.cmd export 示例页面 --variant B2              :: v3 项目按指定变体导出
+cli.cmd catalog                                  :: 支持的组件/属性/布局模式
+cli.cmd inspect 示例页面                          :: 组件树 + 每个组件的布局规则
+cli.cmd inspect 示例页面 save_button --json       :: 指定组件完整定义
+cli.cmd apply 示例页面 --ops ops.json             :: 批量原子修改
+cli.cmd validate 示例页面 [--snapshot 快照.json]   :: 结构检查（+实测检查）
+cli.cmd export 示例页面                           :: 导出包
+cli.cmd export 示例页面 --variant B2              :: v3 项目按指定变体导出
 ```
 
 > **agent 注意**：`cli.cmd` 经 Git Bash 调用会挂起——脚本环境请直接 `node cli/cli.js <命令>`。
@@ -244,3 +244,9 @@ D:\UIForge\cli.cmd export 示例页面 --variant B2              :: v3 项目按
 - 响应式断点、多选与成组、结构化扩展样式（渐变/阴影/字体）、素材面板与自定义预设 → S2/S3。
 - 溢出检查基于单视口实测；大部分超出画布的内容会在"检查布局"中报 `E_OFFSCREEN`（有意出血暂以 `flags.allowOverflow` 记录溢出豁免，S2 将完善意图表达）。
 - 编辑器最小化/后台时 html2canvas 截图可能超时（有 12s 兜底，导出包其余内容不受影响）。
+
+---
+
+## 许可证
+
+本项目以 [MIT License](LICENSE) 开源。内置的第三方库 [html2canvas](https://html2canvas.hertzen.com) 1.4.1（MIT License © Niklas von Hertzen）随 `vendor/` 一并分发，其版权声明保留在文件头部。

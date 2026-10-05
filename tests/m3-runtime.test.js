@@ -265,9 +265,9 @@ test('export-html：v3 预览页包含 resolve/runtime 内联、桥接与按变�
   const html = buildPreviewHtml({ doc: v3doc, ...sources });
   assert.match(html, /function resolveVariant\(/, 'resolve.js 已内联');
   assert.match(html, /function initInteractions\(/, 'runtime.js 已内联');
-  assert.match(html, /window\.UIForgeResolve = /, 'resolve 桥接');
-  assert.match(html, /window\.UIForgeRuntime = /, 'runtime 桥接');
-  assert.match(html, /window\.UIFORGE_VARIANT = /, '变体注入点');
+  assert.match(html, /window\.CanvasLoomResolve = /, 'resolve 桥接');
+  assert.match(html, /window\.CanvasLoomRuntime = /, 'runtime 桥接');
+  assert.match(html, /window\.CANVASLOOM_VARIANT = /, '变体注入点');
   assert.match(html, /DOC\.version === 3/, 'v3 分支门禁');
   assert.match(html, /resolveVariant\(DOC, vid\)/, '按变体解析成 v2 形状再渲染');
   const iResolve = html.indexOf('function resolveVariant(');
@@ -280,8 +280,8 @@ test('export-html：传 variantId 与不传生成的页面不同（B2 注入 vs 
   const withV = buildPreviewHtml({ doc: v3doc, ...sources, variantId: 'B2' });
   const withoutV = buildPreviewHtml({ doc: v3doc, ...sources });
   assert.notEqual(withV, withoutV);
-  assert.match(withV, /window\.UIFORGE_VARIANT = "B2"/);
-  assert.match(withoutV, /window\.UIFORGE_VARIANT = null/);
+  assert.match(withV, /window\.CANVASLOOM_VARIANT = "B2"/);
+  assert.match(withoutV, /window\.CANVASLOOM_VARIANT = null/);
 });
 
 // ---------- export-html：BOOTSTRAP 行为级验证（embed 模式，假 window/document） ----------
@@ -304,7 +304,7 @@ function runBootstrap(html, { docJson, resolve, runtime, variant }) {
     listeners: {},
     addEventListener(type, fn) { (this.listeners[type] = this.listeners[type] || []).push(fn); },
   };
-  win.UIForgeRenderer = { renderDoc: (container, d, opts) => {
+  win.CanvasLoomRenderer = { renderDoc: (container, d, opts) => {
     calls.render.push({ doc: d, opts });
     const rootEl = doc.createElement('div');
     rootEl.dataset.id = 'root';
@@ -318,12 +318,12 @@ function runBootstrap(html, { docJson, resolve, runtime, variant }) {
     container.appendChild(rootEl);
     return rootEl;
   } };
-  win.UIForgeResolve = { resolveVariant: (d, vid) => { calls.resolve.push(vid); return resolve.resolveVariant(d, vid); } };
-  win.UIForgeRuntime = {
+  win.CanvasLoomResolve = { resolveVariant: (d, vid) => { calls.resolve.push(vid); return resolve.resolveVariant(d, vid); } };
+  win.CanvasLoomRuntime = {
     extractInteractionSpec: runtime.extractInteractionSpec,
     initInteractions: (opts) => { calls.init.push(opts); return runtime.initInteractions(opts); },
   };
-  win.UIFORGE_VARIANT = variant === undefined ? null : variant;
+  win.CANVASLOOM_VARIANT = variant === undefined ? null : variant;
   new Function('window', 'document', 'location', 'requestAnimationFrame', boot)(win, doc, { search: '' }, () => {});
   return { calls, doc, app };
 }
@@ -386,7 +386,7 @@ function runCli(args) {
 }
 
 test('CLI --variant：v2 文档带 flag 报错 E_VARIANT_FLAG_ON_V2，不产生导出包', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'uiforge-m3-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'canvasloom-m3-'));
   try {
     const input = path.join(tmp, 'v2.uidoc.json');
     fs.writeFileSync(input, JSON.stringify(newDoc('v2 项目', 'generic')), 'utf8');
@@ -399,7 +399,7 @@ test('CLI --variant：v2 文档带 flag 报错 E_VARIANT_FLAG_ON_V2，不产生�
 });
 
 test('CLI --variant：v3 未知变体报错 E_VARIANT_UNKNOWN 并列出可用 id', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'uiforge-m3-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'canvasloom-m3-'));
   try {
     const input = path.join(tmp, 'v3.uidoc.json');
     fs.writeFileSync(input, JSON.stringify(v3doc), 'utf8');
@@ -412,7 +412,7 @@ test('CLI --variant：v3 未知变体报错 E_VARIANT_UNKNOWN 并列出可用 id
 });
 
 test('CLI --variant：合法变体导出成功，report.json 记 variant，页面按指定变体解析，design.uidoc.json 仍为原文档', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'uiforge-m3-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'canvasloom-m3-'));
   try {
     const input = path.join(tmp, 'v3.uidoc.json');
     fs.writeFileSync(input, JSON.stringify(v3doc), 'utf8');
@@ -424,7 +424,7 @@ test('CLI --variant：合法变体导出成功，report.json 记 variant，页�
     const report = JSON.parse(fs.readFileSync(path.join(outDir, 'report.json'), 'utf8'));
     assert.equal(report.variant, 'B1', 'report.json 记录渲染变体');
     const html = fs.readFileSync(path.join(outDir, 'preview.html'), 'utf8');
-    assert.match(html, /window\.UIFORGE_VARIANT = "B1"/, '页面按指定变体解析');
+    assert.match(html, /window\.CANVASLOOM_VARIANT = "B1"/, '页面按指定变体解析');
     assert.match(html, /function resolveVariant\(/, '解析器已内联');
     assert.match(html, /function initInteractions\(/, '交互运行时已内联');
     const designOut = JSON.parse(fs.readFileSync(path.join(outDir, 'design.uidoc.json'), 'utf8'));
@@ -435,7 +435,7 @@ test('CLI --variant：合法变体导出成功，report.json 记 variant，页�
 });
 
 test('CLI export：v3 缺省按 activeVariant 导出且 report.json 记 variant=A1', () => {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'uiforge-m3-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'canvasloom-m3-'));
   try {
     const input = path.join(tmp, 'v3.uidoc.json');
     fs.writeFileSync(input, JSON.stringify(v3doc), 'utf8');

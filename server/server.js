@@ -1,5 +1,5 @@
 // ============================================================
-// UIForge 本地服务端 —— 零依赖，仅监听 127.0.0.1
+// CanvasLoom 本地服务端 —— 零依赖，仅监听 127.0.0.1
 //   静态托管 app/ shared/ vendor/
 //   项目文件读写 API（修订号冲突检测 + 原子写入 + SSE 通知）
 //   导出包落盘（设计文件 + 快照 + 报告 + 自包含预览页 + 截图）
@@ -128,7 +128,7 @@ async function handleApi(req, res, url) {
   const p = url.pathname;
 
   if (p === '/api/hello' && req.method === 'GET') {
-    return send(res, 200, { ok: true, name: 'UIForge', root: ROOT, projects: PROJECTS_DIR, protocolVersion: 2 });
+    return send(res, 200, { ok: true, name: 'CanvasLoom', root: ROOT, projects: PROJECTS_DIR, protocolVersion: 2 });
   }
 
   if (p === '/api/events' && req.method === 'GET') {
@@ -357,17 +357,17 @@ const server = http.createServer(async (req, res) => {
 
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
-    console.log(`[UIForge] 端口 ${PORT} 已被占用，编辑器可能已在运行（直接刷新浏览器即可）。`);
+    console.log(`[CanvasLoom] 端口 ${PORT} 已被占用，编辑器可能已在运行（直接刷新浏览器即可）。`);
     process.exit(0);
   }
-  console.error('[UIForge] 服务器错误：', e);
+  console.error('[CanvasLoom] 服务器错误：', e);
   process.exit(1);
 });
 
 server.listen(PORT, '127.0.0.1', () => {
-  console.log(`[UIForge] 编辑器已启动：http://127.0.0.1:${PORT}`);
-  console.log(`[UIForge] 项目目录：${PROJECTS_DIR}`);
-  console.log('[UIForge] 关闭本窗口即退出编辑器。');
+  console.log(`[CanvasLoom] 编辑器已启动：http://127.0.0.1:${PORT}`);
+  console.log(`[CanvasLoom] 项目目录：${PROJECTS_DIR}`);
+  console.log('[CanvasLoom] 关闭本窗口即退出编辑器。');
   startProjectWatcher();
 });
 

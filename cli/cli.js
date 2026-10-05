@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // ============================================================
-// UIForge agent 命令行入口（零依赖，不访问网络，不启动子进程）
+// CanvasLoom agent 命令行入口（零依赖，不访问网络，不启动子进程）
 //   catalog                      查看支持的组件、属性和布局模式
 //   inspect  <项目|路径> [id]     读取组件树、布局规则和指定组件信息
 //   apply    <项目|路径> --ops f  按组件 ID 批量原子提交增改移删（校验失败整体拒绝）
@@ -49,7 +49,7 @@ function fail(code, message, extra = {}) {
   process.exit(2);
 }
 function usage() {
-  console.log(`UIForge agent 命令行
+  console.log(`CanvasLoom agent 命令行
 
 用法：
   cli.cmd catalog
@@ -181,7 +181,7 @@ function catalog() {
   if (flags.json) return out({ ok: true, catalog: data });
 
   const L = [];
-  L.push('UIForge 布局协议 UIDoc v' + P.DOC_VERSION);
+  L.push('CanvasLoom 布局协议 UIDoc v' + P.DOC_VERSION);
   L.push('\n■ 场景模式（doc.mode，缺省 generic）');
   for (const [id, m] of Object.entries(P.UI_MODES)) {
     L.push(`  ${id.padEnd(8)} ${m.label} —— ${m.desc}（画布 ${m.canvas.width}×${m.canvas.height}）`);
@@ -371,7 +371,7 @@ async function exportProj() {
   files.push('preview.html');
 
   await fsp.writeFile(path.join(dir, '使用说明.txt'), [
-    'UIForge 导出包（CLI）',
+    'CanvasLoom 导出包（CLI）',
     '',
     '· design.uidoc.json  设计文件（UIDoc v' + P.DOC_VERSION + '，修订号 ' + doc.revision + '）',
     '· preview.html       自包含网页预览（双击打开，无需本编辑器）：',
@@ -386,7 +386,7 @@ async function exportProj() {
   files.push('使用说明.txt');
 
   const staticReport2 = staticReport; // 已在函数开头完成校验
-  const report = { generatedAt: ts.toISOString(), tool: 'uiforge-cli', static: staticReport2,
+  const report = { generatedAt: ts.toISOString(), tool: 'canvasloom-cli', static: staticReport2,
     errors: staticReport2.errors, warnings: staticReport2.warnings };
   if (effectiveVariant) report.variant = effectiveVariant; // v3：记录本次导出实际渲染的变体
   await fsp.writeFile(path.join(dir, 'report.json'), JSON.stringify(report, null, 2), 'utf8'); files.push('report.json');

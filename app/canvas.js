@@ -276,7 +276,7 @@ function clearPaletteHover() {
 
 function onPaletteDragEnd() {
   clearPaletteHover();
-  window.__uiforgeDrag = null;
+  window.__canvasloomDrag = null;
 }
 
 // 指针下落点上下文：最深组件 → 它所在容器（组件本身是容器则用它）
@@ -415,7 +415,7 @@ function onPaletteDragOver(e) {
     const y = g.rowSizes.length ? g.gridRect.y + (cell.row - 1) * (rowH + g.rowGap) : g.gridRect.y;
     paletteHover.cellBox.style.cssText = `left:${x}px;top:${y}px;width:${colW}px;height:${rowH}px;`;
   } else if (ctx.mode === 'free') {
-    const payload = window.__uiforgeDrag;
+    const payload = window.__canvasloomDrag;
     const size = payload ? estimateDropSize(payload, viewDoc().mode || 'generic') : { w: 120, h: 40 };
     paletteHover.ghostSize = size;
     paletteHover.ghost.style.cssText = `left:${ctx.point.x - size.w / 2}px;top:${ctx.point.y - size.h / 2}px;width:${size.w}px;height:${size.h}px;`;
@@ -436,8 +436,8 @@ function onPaletteDrop(e) {
   e.preventDefault();
   let payload = null;
   try { payload = JSON.parse(e.dataTransfer.getData(PALETTE_MIME) || 'null'); } catch { /* 数据损坏按无 payload 处理 */ }
-  if (!payload && window.__uiforgeDrag) payload = window.__uiforgeDrag;
-  window.__uiforgeDrag = null;
+  if (!payload && window.__canvasloomDrag) payload = window.__canvasloomDrag;
+  window.__canvasloomDrag = null;
   const ctx = resolveDropContext(e);
   clearPaletteHover();
   if (!payload || !ctx.cNode) return;

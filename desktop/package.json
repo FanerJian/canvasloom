@@ -1,9 +1,9 @@
 {
-  "name": "uiforge-desktop",
-  "productName": "UIForge 界面工坊",
+  "name": "canvasloom-desktop",
+  "productName": "CanvasLoom 界面工坊",
   "version": "0.3.0",
   "private": true,
-  "description": "界面工坊桌面壳：独立应用窗口内嵌本地 UIForge 服务",
+  "description": "界面工坊桌面壳：独立应用窗口内嵌本地 CanvasLoom 服务",
   "main": "main.js",
   "devDependencies": {
     "electron": "31.7.7"

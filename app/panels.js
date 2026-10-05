@@ -28,13 +28,13 @@ const TYPE_ICONS = {
 };
 
 // palette 拖拽源：dragover 期间 dataTransfer.getData 不可读，
-// payload 同时写入 window.__uiforgeDrag 供画布做幽灵占位，drop 时以 getData 为准
+// payload 同时写入 window.__canvasloomDrag 供画布做幽灵占位，drop 时以 getData 为准
 function attachPaletteDrag(btn, payload) {
   btn.draggable = true;
   btn.addEventListener('dragstart', (e) => {
     e.dataTransfer.effectAllowed = 'copy';
     e.dataTransfer.setData(PALETTE_MIME, JSON.stringify(payload));
-    window.__uiforgeDrag = payload;
+    window.__canvasloomDrag = payload;
   });
 }
 
@@ -182,7 +182,7 @@ function treeNode(comp, depth) {
   }
   row.addEventListener('click', () => select(comp.id));
   row.addEventListener('dragstart', (e) => {
-    e.dataTransfer.setData('text/uiforge-id', comp.id);
+    e.dataTransfer.setData('text/canvasloom-id', comp.id);
     e.dataTransfer.effectAllowed = 'move';
   });
   if (isContainer(comp)) {
@@ -191,7 +191,7 @@ function treeNode(comp, depth) {
     row.addEventListener('drop', (e) => {
       e.preventDefault();
       row.classList.remove('drop-target');
-      const dragId = e.dataTransfer.getData('text/uiforge-id');
+      const dragId = e.dataTransfer.getData('text/canvasloom-id');
       if (!dragId || dragId === comp.id) return;
       // DOM 几何在 mutate 前采集（转自由布局时保持视觉位置与被拉伸的尺寸）
       const geo = { position: positionPreservingVisual(dragId, comp.id), rect: designRectById(dragId) };

@@ -1,6 +1,6 @@
 @echo off
 chcp 65001 >nul
-rem UIForge agent 命令行入口
+rem CanvasLoom agent 命令行入口
 rem 用法示例：
 rem   cli.cmd catalog
 rem   cli.cmd inspect 示例页面 save_button

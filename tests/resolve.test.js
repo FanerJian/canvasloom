@@ -1,5 +1,5 @@
 // ============================================================
-// UIForge M2 变体解析器自动检查（resolveVariant → v2 形状文档）
+// CanvasLoom M2 变体解析器自动检查（resolveVariant → v2 形状文档）
 // 覆盖：冻结样例全 variant 解析 → v2 校验 0 错误；快照等价（手写 v2 文档
 // 与解析结果逐字段 deepEqual：persistent×modern 与 popup×scifi）；其余
 // variant 结构断言；令牌替换/微调/字面量保留/补丁优先；v3 专属字段剥离与
