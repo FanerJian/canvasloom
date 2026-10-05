@@ -164,9 +164,22 @@ function treeNode(comp, depth) {
   row.dataset.id = comp.id;
   row.draggable = true;
   row.style.paddingLeft = (8 + depth * 14) + 'px';
-  const caret = isContainer(comp) && (comp.children || []).length ? '▾' : (isContainer(comp) ? '▸' : '');
-  row.innerHTML = `<span class="tree-caret">${caret}</span><span class="tree-ico">${TYPE_ICONS[comp.type] || '▪'}</span>` +
+  const hasChildren = isContainer(comp) && (comp.children || []).length > 0;
+  const collapsed = state.collapsedTreeIds.has(comp.id);
+  const caret = hasChildren ? (collapsed ? '▸' : '▾') : (isContainer(comp) ? '▸' : '');
+  const caretCls = hasChildren ? 'tree-caret tog' : (isContainer(comp) ? 'tree-caret empty' : 'tree-caret');
+  row.innerHTML = `<span class="${caretCls}">${caret}</span><span class="tree-ico">${TYPE_ICONS[comp.type] || '▪'}</span>` +
     `<span class="tree-name">${escapeHtml(comp.name || comp.id)}</span><span class="tree-id">${escapeHtml(comp.id)}</span>`;
+  if (hasChildren) {
+    const caretEl = row.querySelector('.tree-caret');
+    caretEl.title = collapsed ? '展开子组件' : '折叠子组件';
+    caretEl.addEventListener('click', (e) => {
+      e.stopPropagation(); // 点箭头只折叠/展开，不改变选中
+      if (collapsed) state.collapsedTreeIds.delete(comp.id);
+      else state.collapsedTreeIds.add(comp.id);
+      renderTree();
+    });
+  }
   row.addEventListener('click', () => select(comp.id));
   row.addEventListener('dragstart', (e) => {
     e.dataTransfer.setData('text/uiforge-id', comp.id);
@@ -201,7 +214,7 @@ function treeNode(comp, depth) {
   }
   const frag = document.createDocumentFragment();
   frag.appendChild(row);
-  if (isContainer(comp)) {
+  if (hasChildren && !collapsed) {
     for (const cid of comp.children || []) {
       const child = findComponent(viewDoc(), cid);
       if (child) frag.appendChild(treeNode(child, depth + 1));

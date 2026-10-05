@@ -1,7 +1,7 @@
 // ============================================================
 // 编辑器状态中心：文档、历史（撤销/重做）、选择、缩放、模式
 // ============================================================
-import { findComponent, isContainer, LIMITS } from '../shared/protocol.js';
+import { findComponent, isContainer, ancestorsOf, LIMITS } from '../shared/protocol.js';
 import { resolveVariant } from '../shared/resolve.js';
 
 // 缩放/吸附等视图偏好的持久化键（画布行为偏好不进设计文档）
@@ -30,6 +30,7 @@ export const state = {
   lastAdded: null,    // 刚添加的组件 id（画布重建后播放一次高亮）
   lastBlockId: null,  // 刚插入的预设块根 id（连续插入时平级追加，不嵌套）
   lastExternal: null, // 外部修改提示（未被采纳时）
+  collapsedTreeIds: new Set(), // 层级树手动折叠的容器 id（纯视图状态，不进文档）
 };
 
 // 预设块面板的场景过滤：null = 跟随文档模式；否则固定浏览某个模式的块
@@ -107,6 +108,7 @@ export function loadProject(name, doc) {
   state.mode = 'design';
   state.lastBlockId = null;
   state.lastExternal = null;
+  state.collapsedTreeIds.clear(); // 新文档从全展开开始
   history.undo = [];
   history.redo = [];
   coalesce = { key: null, time: 0 };
@@ -184,6 +186,8 @@ export function redo() {
 export function select(id) {
   if (state.selection === id) return;
   state.selection = id;
+  // 新选点若落在折叠的子树里，展开其祖先链，保证层级树中可见
+  if (id) for (const pid of ancestorsOf(scopeOf(state.doc), id)) state.collapsedTreeIds.delete(pid);
   // 用户把选点移到别处后，"连续插入预设块"的平级追加记忆即失效
   if (id !== state.lastBlockId) state.lastBlockId = null;
   emit({ reason: 'select' });
