@@ -9,7 +9,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { upgradeDoc, inspectDocVersion, migrationPreservesSemantics, CompatError } from '../shared/compat.js';
 import { validateDoc } from '../shared/validate.js';
-import { DOC_VERSION } from '../shared/protocol.js';
+import { DOC_VERSION, DOC_VERSION_V3 } from '../shared/protocol.js';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTS_DIR = path.resolve(HERE, '..', 'projects');
@@ -31,6 +31,12 @@ test('现有项目副本均可读且为受支持版本', () => {
 test('upgradeDoc：升级/拷贝除版本号外内容完全一致，且不改原对象', () => {
   for (const { file, doc } of loadProjectCopies()) {
     const upgraded = upgradeDoc(doc);
+    if (doc.version === DOC_VERSION_V3) {
+      // v3 原样通过（冻结决策 10）：不升级、不改形，只有深拷贝
+      assert.equal(upgraded.version, DOC_VERSION_V3, `${file} v3 应原样返回`);
+      assert.deepEqual(upgraded, doc, `${file} v3 内容必须逐字段一致`);
+      continue;
+    }
     assert.equal(upgraded.version, DOC_VERSION, `${file} 升级后应为 v${DOC_VERSION}`);
     assert.deepEqual(upgraded.components, doc.components, `${file} components 必须原样保留`);
     assert.deepEqual(upgraded.resources || {}, doc.resources || {}, `${file} resources 必须原样保留`);

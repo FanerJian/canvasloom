@@ -1,7 +1,7 @@
 // ============================================================
 // 画布右键菜单：常用操作就地可达（编辑文字/复制/副本/层级/删除）
 // ============================================================
-import { state, select } from './store.js';
+import { state, select, viewDoc } from './store.js';
 import { findComponent, isContainer } from '../shared/protocol.js';
 import { copySelection, pasteClipboard, deleteComponent, duplicateComponent, reorder } from './panels.js';
 import { beginTextEditMode } from './canvas.js';
@@ -37,7 +37,7 @@ function sep(menu) {
 
 export function openContextMenu(e, compId) {
   close();
-  const comp = compId ? findComponent(state.doc, compId) : null;
+  const comp = compId ? findComponent(viewDoc(), compId) : null;
   const menu = document.createElement('div');
   menu.className = 'ctx-menu';
 
@@ -50,7 +50,7 @@ export function openContextMenu(e, compId) {
       item(menu, '⇩ 粘贴到此容器内', () => pasteInto(comp.id));
     }
     sep(menu);
-    const parent = comp.parent ? findComponent(state.doc, comp.parent) : null;
+    const parent = comp.parent ? findComponent(viewDoc(), comp.parent) : null;
     const idx = parent ? (parent.children || []).indexOf(comp.id) : -1;
     const count = parent ? (parent.children || []).length : 0;
     item(menu, '↑ 上移一层', idx > 0 ? () => reorder(comp.id, idx - 1) : null);

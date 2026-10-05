@@ -1,12 +1,13 @@
 // ============================================================
 // 编辑器入口：装配、工具栏、快捷键、保存与外部修改协同
 // ============================================================
-import { state, on, select, undo, redo, loadProject, adoptExternal, selectedComp, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas } from './store.js';
+import { state, on, select, undo, redo, loadProject, adoptExternal, selectedComp, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas, viewDoc } from './store.js';
 import { UI_MODES } from '../shared/modes.js';
 import { LIMITS } from '../shared/protocol.js';
 import { validateDoc } from '../shared/validate.js';
 import { initCanvas, renderCanvas, refreshOverlay, fitZoom, nudge } from './canvas.js';
 import { renderPalette, renderBlocks, renderTree, renderProperties, renderToolbarState, openModal, closeModal, toast, copySelection, pasteClipboard, deleteComponent, duplicateComponent } from './panels.js';
+import { renderFeaturesPanel, openVariantWizard, switchVariant } from './v3panels.js';
 import { initPreviewBar, renderPreviewPane, runCheck, runExport } from './preview.js';
 import { listProjects, getProject, createProject, saveProject, connectEvents } from './api.js';
 import { closeContextMenu } from './ctxmenu.js';
@@ -69,16 +70,19 @@ function renderAll(detail = {}) {
       renderTree();
       renderProperties();
       renderBlocks();
+      renderFeaturesPanel();
     }
   }
   // 空状态引导卡：一旦加载了项目就隐藏
   const esCard = $('empty-state');
   if (esCard) esCard.classList.toggle('hidden', !!state.doc);
   renderToolbarState();
+  renderVariantMenu();
   // 调试/自动化检查出口（只读快照）
   window.__uiforge = {
     name: state.name, revision: state.revision, dirty: state.dirty,
     mode: state.mode, selection: state.selection, doc: state.doc,
+    view: viewDoc(), viewError: state.viewError || null,
     lastCheck: state.lastCheck || null,
   };
   if (state.pendingSelect) {
@@ -340,28 +344,68 @@ function savePanelPrefs() {
   } catch { /* localStorage 不可用时忽略 */ }
 }
 
+// ---------- 顶栏变体切换菜单（仅 v3 文档显示） ----------
+function renderVariantMenu() {
+  const wrap = $('variant-wrap'), btn = $('btn-variant'), menu = $('variant-menu'), label = $('variant-label');
+  if (!wrap || !btn || !menu || !label) return;
+  const doc = state.doc;
+  const variants = doc && doc.version === 3 && Array.isArray(doc.variants) ? doc.variants.filter(Boolean) : [];
+  const isV3 = variants.length > 0;
+  wrap.classList.toggle('hidden', !isV3);
+  if (!isV3) { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); return; }
+  const cur = variants.find((v) => v.id === doc.activeVariant);
+  label.textContent = cur ? (cur.label || cur.id) : (doc.activeVariant || '（未设置）');
+  menu.textContent = '';
+  for (const v of variants) {
+    const item = document.createElement('button');
+    item.className = 'tb-btn variant-item' + (v.id === doc.activeVariant ? ' current' : '');
+    const style = (doc.styles || {})[v.style];
+    const pres = (doc.presentations || {})[v.presentation];
+    item.textContent = (v.id === doc.activeVariant ? '✓ ' : '') +
+      `${v.label || v.id}（${(style && style.label) || v.style || '?'} · ${(pres && pres.label) || v.presentation || '?'}）`;
+    item.addEventListener('click', () => { closeMenus(); switchVariant(v); });
+    menu.appendChild(item);
+  }
+  const sep = document.createElement('div');
+  sep.className = 'tb-menu-sep';
+  menu.appendChild(sep);
+  const add = document.createElement('button');
+  add.className = 'tb-btn';
+  add.textContent = '＋ 新建变体（向导）…';
+  add.addEventListener('click', () => { closeMenus(); openVariantWizard(); });
+  menu.appendChild(add);
+}
+
 // ---------- 顶栏「更多」菜单与画布选项弹出层 ----------
 function closeMenus() {
   const moreMenu = $('more-menu');
   const optsMenu = $('canvas-opts-menu');
   const moreWrap = $('more-wrap');
+  const varMenu = $('variant-menu');
+  const varWrap = $('variant-wrap');
   if (moreMenu) moreMenu.classList.add('hidden');
   if (optsMenu) optsMenu.classList.add('hidden');
+  if (varMenu) varMenu.classList.add('hidden');
   if (moreWrap) moreWrap.classList.remove('open');
+  if (varWrap) varWrap.classList.remove('open');
   const moreBtn = $('btn-more');
   const optsBtn = $('btn-canvas-opts');
+  const varBtn = $('btn-variant');
   if (moreBtn) moreBtn.setAttribute('aria-expanded', 'false');
   if (optsBtn) { optsBtn.setAttribute('aria-expanded', 'false'); optsBtn.classList.remove('active'); }
+  if (varBtn) varBtn.setAttribute('aria-expanded', 'false');
 }
 
 function initMenus() {
   const moreBtn = $('btn-more'), moreMenu = $('more-menu'), moreWrap = $('more-wrap');
   const optsBtn = $('btn-canvas-opts'), optsMenu = $('canvas-opts-menu');
+  const varBtn = $('btn-variant'), varMenu = $('variant-menu'), varWrap = $('variant-wrap');
   moreBtn.addEventListener('click', () => {
     const open = !moreMenu.classList.toggle('hidden');
     moreWrap.classList.toggle('open', open);
     moreBtn.setAttribute('aria-expanded', String(open));
     optsMenu.classList.add('hidden');
+    varMenu.classList.add('hidden');
   });
   // 画布选项是开关集合：点选后保持弹层打开，便于连续切换并看到状态变化
   optsBtn.addEventListener('click', () => {
@@ -370,31 +414,43 @@ function initMenus() {
     optsBtn.classList.toggle('active', open);
     moreMenu.classList.add('hidden');
     moreWrap.classList.remove('open');
+    varMenu.classList.add('hidden');
+  });
+  // 变体切换菜单（v3 文档；按钮隐藏时点击不到）
+  varBtn.addEventListener('click', () => {
+    const open = !varMenu.classList.toggle('hidden');
+    varBtn.setAttribute('aria-expanded', String(open));
+    moreMenu.classList.add('hidden');
+    moreWrap.classList.remove('open');
+    optsMenu.classList.add('hidden');
   });
   // 点选「更多」里的动作项（复制/粘贴/删除/检查布局）后收起
   moreMenu.addEventListener('click', (e) => { if (e.target.closest('button')) closeMenus(); });
   // 点击外部收起（pointerdown 先于 click，不与按钮自身 toggle 冲突）
   document.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#more-wrap') || e.target.closest('#canvas-opts-menu')) return;
+    if (e.target.closest('#more-wrap') || e.target.closest('#canvas-opts-menu') || e.target.closest('#variant-wrap')) return;
     closeMenus();
   });
   // Esc 收起（initKeys 已处理选中与弹窗，这里只管菜单）
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenus(); });
 }
 
-// ---------- 左栏标签页：添加 / 层级 ----------
+// ---------- 左栏标签页：添加 / 层级 / 功能风格 ----------
 function showLeftTab(which) {
-  const add = which === 'add';
-  $('tab-add').classList.toggle('active', add);
-  $('tab-tree').classList.toggle('active', !add);
-  $('tab-add').setAttribute('aria-selected', String(add));
-  $('tab-tree').setAttribute('aria-selected', String(!add));
-  $('left-page-add').classList.toggle('hidden', !add);
-  $('left-page-tree').classList.toggle('hidden', add);
+  $('tab-add').classList.toggle('active', which === 'add');
+  $('tab-tree').classList.toggle('active', which === 'tree');
+  $('tab-fs').classList.toggle('active', which === 'fs');
+  $('tab-add').setAttribute('aria-selected', String(which === 'add'));
+  $('tab-tree').setAttribute('aria-selected', String(which === 'tree'));
+  $('tab-fs').setAttribute('aria-selected', String(which === 'fs'));
+  $('left-page-add').classList.toggle('hidden', which !== 'add');
+  $('left-page-tree').classList.toggle('hidden', which !== 'tree');
+  $('left-page-fs').classList.toggle('hidden', which !== 'fs');
 }
 function initLeftTabs() {
   $('tab-add').addEventListener('click', () => showLeftTab('add'));
   $('tab-tree').addEventListener('click', () => showLeftTab('tree'));
+  $('tab-fs').addEventListener('click', () => showLeftTab('fs'));
 }
 
 // ---------- 空状态引导卡 ----------

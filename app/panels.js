@@ -2,10 +2,11 @@
 // 面板：左侧（组件库 + 层级树）、右侧（属性面板）、模态框、提示
 // 属性面板中文标签与 shared/protocol.js 的字段定义同源。
 // ============================================================
-import { state, mutate, select, history, selectedComp, PALETTE_MIME } from './store.js';
+import { state, mutate, select, history, selectedComp, PALETTE_MIME, viewDoc, scopeOf } from './store.js';
 import {
   COMPONENT_TYPES, TYPE_IDS, LAYOUT_MODES, SIZE_MODES, LIMITS,
   JUSTIFY_OPTIONS, ALIGN_OPTIONS, STYLE_FIELDS, ID_PATTERN,
+  V3_BIND_PATTERN, V3_ACTION_TYPES,
   findComponent, isContainer, listContainers, normalizePadding,
   newComponent, cloneSubtree, genId, slugify, firstFreeGridCell, DEFAULT_MODE,
 } from '../shared/protocol.js';
@@ -13,6 +14,7 @@ import { UI_MODES } from '../shared/modes.js';
 import { instantiateBlock } from '../shared/blocks.js';
 import { validateDoc } from '../shared/validate.js';
 import { designRectById, positionPreservingVisual } from './design-geometry.js';
+import { remapComponentRefs, cleanupDeletedRefs } from './v3edit.js';
 
 const svgWrap = (inner) => `<svg viewBox="0 0 24 24">${inner}</svg>`;
 const TYPE_ICONS = {
@@ -42,7 +44,7 @@ function attachPaletteDrag(btn, payload) {
 export function renderBlocks() {
   const host = document.getElementById('pal-blocks');
   if (!host) return;
-  const docMode = state.doc ? (state.doc.mode || DEFAULT_MODE) : DEFAULT_MODE;
+  const docMode = state.doc ? ((viewDoc() || state.doc).mode || DEFAULT_MODE) : DEFAULT_MODE;
   const viewMode = state.paletteModeId && UI_MODES[state.paletteModeId] ? state.paletteModeId : docMode;
   const key = viewMode + '|' + (state.paletteModeId || '');
   if (host.dataset.key === key) return;
@@ -144,7 +146,16 @@ export function renderTree() {
   const tree = document.getElementById('tree');
   if (!state.doc) { tree.textContent = ''; return; }
   tree.textContent = '';
-  tree.appendChild(treeNode(state.doc.components.root, 0));
+  const view = viewDoc();
+  if (!view) {
+    // v3 解析失败：树同样无从展示，画布错误卡已给说明
+    const hint = document.createElement('div');
+    hint.className = 'p-hint';
+    hint.textContent = '当前文档无法解析为设计视图，请查看画布上的错误说明。';
+    tree.appendChild(hint);
+    return;
+  }
+  tree.appendChild(treeNode(view.components.root, 0));
 }
 
 function treeNode(comp, depth) {
@@ -172,7 +183,7 @@ function treeNode(comp, depth) {
       // DOM 几何在 mutate 前采集（转自由布局时保持视觉位置与被拉伸的尺寸）
       const geo = { position: positionPreservingVisual(dragId, comp.id), rect: designRectById(dragId) };
       const oldLayout = JSON.parse(JSON.stringify(
-        (findComponent(state.doc, dragId)?.parent ? findComponent(state.doc, findComponent(state.doc, dragId).parent)?.layout : null) || {}
+        (findComponent(viewDoc(), dragId)?.parent ? findComponent(viewDoc(), findComponent(viewDoc(), dragId).parent)?.layout : null) || {}
       ));
       mutate(`移动 ${dragId} 到 ${comp.name}`, (doc) => {
         const dragged = doc.components[dragId];
@@ -192,7 +203,7 @@ function treeNode(comp, depth) {
   frag.appendChild(row);
   if (isContainer(comp)) {
     for (const cid of comp.children || []) {
-      const child = findComponent(state.doc, cid);
+      const child = findComponent(viewDoc(), cid);
       if (child) frag.appendChild(treeNode(child, depth + 1));
     }
   }
@@ -214,7 +225,7 @@ export function renderProperties() {
     root.appendChild(empty);
     return;
   }
-  const pmode = comp.parent && findComponent(state.doc, comp.parent)?.layout?.mode;
+  const pmode = comp.parent && findComponent(viewDoc(), comp.parent)?.layout?.mode;
 
   const sec1 = section('组件');
   sec1.appendChild(rowText('名称', comp.name || '', (v) => patch(comp.id, { name: v }, `重命名 ${comp.id}`, 'name'), 'text'));
@@ -225,7 +236,7 @@ export function renderProperties() {
   const secPos = section('位置与尺寸');
   if (comp.parent) {
     secPos.appendChild(rowSelect('父容器', containerOptions(comp), comp.parent, (v) => reparent(comp.id, v)));
-    const siblings = findComponent(state.doc, comp.parent).children || [];
+    const siblings = findComponent(viewDoc(), comp.parent).children || [];
     const i = siblings.indexOf(comp.id);
     secPos.appendChild(rowButtons('排列顺序', [
       ['⬆ 上移', () => reorder(comp.id, i - 1), i <= 0],
@@ -260,6 +271,15 @@ export function renderProperties() {
   if (isContainer(comp)) root.appendChild(layoutSection(comp));
 
   const secStyle = section('样式');
+  // v3：活动变体的 overrides 补丁会遮蔽基础样式——编辑写回呈现方案原样式，需明确提示
+  const shadowPatch = v3OverridePatchFor(comp.id);
+  if (shadowPatch) {
+    const hint = document.createElement('div');
+    hint.className = 'p-hint';
+    hint.textContent = '注意：当前变体对组件覆盖了样式（' + Object.keys(shadowPatch).join('、') + '）。' +
+      '下方修改写入呈现方案基础样式，显示效果仍以变体覆盖为准（覆盖键请用 CLI/JSON 维护）。';
+    secStyle.appendChild(hint);
+  }
   for (const f of STYLE_FIELDS) {
     if (f.types && !f.types.includes(comp.type)) continue;
     secStyle.appendChild(styleFieldRow(comp, f));
@@ -286,6 +306,9 @@ export function renderProperties() {
   }
   root.appendChild(secF);
 
+  // v3 组件扩展：功能绑定与交互（编辑器内存直改 presentation 原树；v2 文档不显示）
+  if (state.doc && state.doc.version === 3) root.appendChild(v3BindingSection(comp));
+
   if (comp.id !== 'root') {
     const secD = section('危险操作', false);
     secD.appendChild(rowButtons('', [
@@ -295,10 +318,19 @@ export function renderProperties() {
   }
 }
 
+// 活动变体对指定组件的样式补丁（无则 null）——用于面板遮蔽提示
+function v3OverridePatchFor(compId) {
+  const doc = state.doc;
+  if (!doc || doc.version !== 3) return null;
+  const v = (Array.isArray(doc.variants) ? doc.variants : []).find((x) => x && x.id === doc.activeVariant);
+  const patches = v && v.overrides && v.overrides.components;
+  return (patches && patches[compId]) || null;
+}
+
 // ---- 画布设置（未选中组件时显示） ----
 function canvasSection() {
-  const doc = state.doc;
   const sec = section('画布设置', true);
+  const doc = viewDoc();
   if (!doc) return sec;
   const root = doc.components.root;
 
@@ -478,12 +510,13 @@ function optsOf(options) {
 }
 function containerOptions(comp) {
   const out = [];
-  for (const c of listContainers(state.doc)) {
+  const view = viewDoc();
+  for (const c of listContainers(view)) {
     if (c.id === comp.id) continue;
     // 排除自己的后代
-    let cur = state.doc.components[c.id];
+    let cur = view.components[c.id];
     let bad = false;
-    while (cur && cur.parent) { if (cur.parent === comp.id) { bad = true; break; } cur = state.doc.components[cur.parent]; }
+    while (cur && cur.parent) { if (cur.parent === comp.id) { bad = true; break; } cur = view.components[cur.parent]; }
     if (!bad) out.push([c.id, `${c.name}（${c.id}）`]);
   }
   return out;
@@ -507,9 +540,9 @@ function patchPosition(id, axis, v) {
     { coalesceKey: id + ':pos:' + axis, skipPanels: true });
 }
 function setComponentPlacement(id, mode) {
-  const comp = findComponent(state.doc, id);
+  const comp = findComponent(viewDoc(), id);
   if (!comp || !comp.parent) return;
-  const parent = findComponent(state.doc, comp.parent);
+  const parent = findComponent(viewDoc(), comp.parent);
   const rect = designRectById(id);
   const origin = parent && designRectById(parent.id);
   const parentNode = document.querySelector(`#artboard [data-id="${CSS.escape(parent.id)}"]`);
@@ -547,7 +580,7 @@ function renameComponent(id, v) {
   const nid = slugify(v);
   if (!ID_PATTERN.test(nid)) { alert('标识需以字母或下划线开头，仅含字母/数字/下划线'); renderProperties(); return; }
   if (nid === id) return;
-  if (state.doc.components[nid]) { alert(`标识 "${nid}" 已存在`); renderProperties(); return; }
+  if (scopeOf(state.doc).components[nid]) { alert(`标识 "${nid}" 已存在`); renderProperties(); return; }
   mutate(`重命名标识 ${id} → ${nid}`, (doc) => {
     const c = doc.components[id];
     const parent = c.parent ? doc.components[c.parent] : null;
@@ -563,6 +596,8 @@ function renameComponent(id, v) {
     for (const other of Object.values(doc.components)) {
       if (other.parent === id) other.parent = nid;
     }
+    // v3：联动重映射 actions.target 与指向该 presentation 的变体补丁键
+    if (doc.version === 3) remapComponentRefs(doc, doc.__presentationId, { [id]: nid });
     if (state.selection === id) state.selection = nid;
   });
 }
@@ -570,7 +605,7 @@ function reparent(id, newParent) {
   // DOM 几何在 mutate 前采集；转自由布局保持视觉位置，转网格分配空闲格
   const geo = { position: positionPreservingVisual(id, newParent), rect: designRectById(id) };
   const oldLayout = JSON.parse(JSON.stringify(
-    (findComponent(state.doc, id)?.parent ? findComponent(state.doc, findComponent(state.doc, id).parent)?.layout : null) || {}
+    (findComponent(viewDoc(), id)?.parent ? findComponent(viewDoc(), findComponent(viewDoc(), id).parent)?.layout : null) || {}
   ));
   mutate(`移动 ${id} 到 ${newParent}`, (doc) => {
     const c = doc.components[id];
@@ -597,36 +632,46 @@ export function reorder(id, index) {
 
 // 删除不再弹原生 confirm：靠撤销历史兜底，操作更顺手
 export function deleteComponent(id) {
-  const c = findComponent(state.doc, id);
+  const c = findComponent(viewDoc(), id);
   if (!c || id === 'root') return;
   const label = c.name || id;
   mutate(`删除 ${id}`, (doc) => {
+    const removed = [];
     const rm = (cid) => {
       const cc = doc.components[cid];
       if (!cc) return;
+      removed.push(cid);
       if (cc.children) for (const k of [...cc.children]) rm(k);
       if (cc.parent && doc.components[cc.parent]) doc.components[cc.parent].children = doc.components[cc.parent].children.filter((x) => x !== cid);
       delete doc.components[cid];
     };
     rm(id);
+    // v3：清理指向被删组件的点击动作与变体补丁键，保持文档可保存
+    if (doc.version === 3) cleanupDeletedRefs(doc, doc.__presentationId, removed);
   });
   toast(`已删除「${label}」，Ctrl+Z 可撤销`);
 }
 
 // 创建副本（供右键菜单与 Ctrl+D 使用）
 export function duplicateComponent(id) {
-  const src = findComponent(state.doc, id);
+  const src = findComponent(viewDoc(), id);
   if (!src || id === 'root') return;
   const parentId = src.parent || 'root';
   mutate(`创建副本 ${id}`, (doc) => {
+    const idMap = {};
     const copyOne = (sid, pid) => {
       const s = doc.components[sid];
       if (!s) return null;
       const nid = genId(doc, sid + '_copy');
+      idMap[sid] = nid;
       const copy = JSON.parse(JSON.stringify(s));
       copy.id = nid;
       copy.parent = pid;
       copy.name = (s.name || sid) + ' 副本';
+      // v3：副本内部的点击动作指向也换成副本内的对应组件（外部目标保持不变）
+      if (copy.actions && copy.actions.click && idMap[copy.actions.click.target]) {
+        copy.actions.click = { ...copy.actions.click, target: idMap[copy.actions.click.target] };
+      }
       doc.components[nid] = copy;
       if (isContainer(copy)) copy.children = (s.children || []).map((cid) => copyOne(cid, nid)).filter(Boolean);
       return nid;
@@ -659,7 +704,7 @@ function positionHint(comp, pmode) {
     if (state.freeMove && !componentIsAbsolute(comp)) {
       parts.push('自由移动开启时，首次拖动转为独立摆放，并按当前实测宽高固定尺寸。');
     } else {
-      const parent = comp.parent && findComponent(state.doc, comp.parent);
+      const parent = comp.parent && findComponent(viewDoc(), comp.parent);
       const ratio = !componentIsAbsolute(comp) && parent && ['horizontal', 'vertical'].includes(parent.layout?.mode);
       parts.push(`按布局调整尺寸时，「填满剩余」转为固定值；「百分比」${ratio ? '在横向/纵向排列中按新比例重算' : '在当前布局中转为固定值'}。`);
     }
@@ -719,7 +764,7 @@ function sizeRow(comp, axis, label) {
 
 function componentIsAbsolute(comp) {
   if (comp?.placement) return comp.placement.mode === 'absolute';
-  const parent = comp?.parent && findComponent(state.doc, comp.parent);
+  const parent = comp?.parent && findComponent(viewDoc(), comp.parent);
   return !!(parent?.layout?.mode === 'free');
 }
 
@@ -854,7 +899,7 @@ function adaptChildToTargetLayout(doc, child, target, geo, oldLayout) {
 
 // 布局切换（一次转换 = 一次撤销）：DOM 几何读取必须在 mutate 之前完成
 function switchLayoutPreserving(id, v) {
-  const comp0 = findComponent(state.doc, id);
+  const comp0 = findComponent(viewDoc(), id);
   if (!comp0 || !isContainer(comp0)) return;
   const oldLayout = JSON.parse(JSON.stringify(comp0.layout || {}));
   const geo = {};
@@ -975,6 +1020,135 @@ function tracksEditor(comp, which, label) {
   return row;
 }
 
+// ---- v3 功能绑定与交互（M5） ----
+// v3 专属字段（featureId/bind/actions/initiallyOpen）在解析视图中已被剥除，
+// 这里读原文档（编辑域 scope）取值；写入仍走 mutate → 编辑域 → presentation 原树。
+function v3BindingSection(comp) {
+  const scope = scopeOf(state.doc);
+  const oc = (scope.components && scope.components[comp.id]) || comp;
+  const features = state.doc.features || {};
+  const sec = section('功能与交互（v3）');
+
+  const featOpts = [['', '（无）'], ...Object.keys(features).map((fid) => [fid, `${(features[fid] && features[fid].label) || fid}（${fid}）`])];
+  sec.appendChild(rowSelect('绑定功能 featureId', featOpts, oc.featureId || '', (v) => patchV3Field(comp.id, 'featureId', v)));
+
+  // bind 首版仅支持键 text（冻结决策 5）
+  if ((comp.type === 'text' || comp.type === 'button') && oc.featureId) {
+    const bindVal = oc.bind && oc.bind.text ? oc.bind.text : '';
+    sec.appendChild(rowText('文本绑定 bind（feature:功能.路径）', bindVal, (v) => setBindText(comp.id, v), 'code', 'feature:bag.items[0]'));
+  }
+
+  if (comp.type === 'button') {
+    const act = oc.actions && oc.actions.click ? oc.actions.click : null;
+    const typeOpts = [['', '（无动作）'], ...V3_ACTION_TYPES.map((t) => [t, { toggle: 'toggle 开/关面板', open: 'open 打开面板', close: 'close 关闭面板' }[t]])];
+    sec.appendChild(rowSelect('点击动作（click）', typeOpts, act ? act.type : '', (v) => setActionType(comp.id, v)));
+    if (act && act.type) {
+      const targets = actionTargets();
+      if (!targets.length) {
+        const hint = document.createElement('div');
+        hint.className = 'p-hint';
+        hint.textContent = '本呈现方案还没有「初始收起」的容器：先把某个容器的初始展开关掉，再回来选目标。';
+        sec.appendChild(hint);
+      } else {
+        sec.appendChild(rowSelect('动作目标面板', targets, act.target || '', (v) => setActionTarget(comp.id, v)));
+      }
+    }
+  }
+
+  if (comp.type === 'container') {
+    sec.appendChild(rowCheck('初始展开（关闭后可作为点击动作的目标面板）', oc.initiallyOpen !== false, (v) => setInitiallyOpen(comp.id, v)));
+  }
+
+  const hint = document.createElement('div');
+  hint.className = 'p-hint';
+  hint.textContent = '说明：画布上的位置/样式修改写入当前呈现方案，对所有使用它的变体生效；变体差异用「变体向导」与风格令牌表达。';
+  sec.appendChild(hint);
+  return sec;
+}
+
+// 可作为动作目标的容器：本 presentation 内 initiallyOpen === false 的容器（冻结决策 5）
+function actionTargets() {
+  const scope = scopeOf(state.doc);
+  const pres = scope.__presentationId && state.doc.presentations ? state.doc.presentations[scope.__presentationId] : null;
+  const comps = pres && pres.components ? pres.components : {};
+  return Object.values(comps)
+    .filter((c) => c && c.type === 'container' && c.initiallyOpen === false)
+    .map((c) => [c.id, `${c.name || c.id}（${c.id}）`]);
+}
+
+function patchV3Field(id, key, value) {
+  mutate(`修改 ${id} 的 ${key}`, (doc) => {
+    const c = doc.components[id];
+    if (!c) return;
+    if (value === '' || value == null) delete c[key];
+    else c[key] = value;
+  });
+}
+
+function setBindText(id, v) {
+  const val = String(v || '').trim();
+  if (!val) {
+    mutate(`清除 ${id} 的文本绑定`, (doc) => {
+      const c = doc.components[id];
+      if (c && c.bind) { delete c.bind.text; if (!Object.keys(c.bind).length) delete c.bind; }
+    });
+    return;
+  }
+  if (!V3_BIND_PATTERN.test(val)) { alert('绑定语法需为 feature:功能id.路径，例如 feature:bag.items[0]'); renderProperties(); return; }
+  const fid = val.slice('feature:'.length).split('.')[0].split('[')[0];
+  if (!state.doc.features || !state.doc.features[fid]) { alert(`功能 "${fid}" 不存在，请先在「功能风格」面板创建`); renderProperties(); return; }
+  mutate(`设置 ${id} 的文本绑定`, (doc) => {
+    const c = doc.components[id];
+    c.bind = Object.assign({}, c.bind, { text: val });
+  });
+}
+
+function setActionType(id, type) {
+  if (!type) {
+    mutate(`移除 ${id} 的点击动作`, (doc) => {
+      const c = doc.components[id];
+      if (c && c.actions) { delete c.actions.click; if (!Object.keys(c.actions).length) delete c.actions; }
+    });
+    return;
+  }
+  const targets = actionTargets();
+  if (!targets.length) { alert('没有可选目标：需要先把某个容器的「初始展开」关掉'); renderProperties(); return; }
+  mutate(`设置 ${id} 点击动作 ${type}`, (doc) => {
+    const c = doc.components[id];
+    c.actions = c.actions || {};
+    c.actions.click = { type, target: (c.actions.click && c.actions.click.target) || targets[0][0] };
+  });
+}
+
+function setActionTarget(id, target) {
+  if (!target) return;
+  mutate(`修改 ${id} 的动作目标`, (doc) => {
+    const c = doc.components[id];
+    if (c && c.actions && c.actions.click) c.actions.click.target = target;
+  });
+}
+
+function setInitiallyOpen(id, open) {
+  if (open) {
+    // 防悬空：本 presentation 内若有按钮指向本容器，改回「初始展开」会让目标失效
+    const scope = scopeOf(state.doc);
+    const pres = scope.__presentationId && state.doc.presentations ? state.doc.presentations[scope.__presentationId] : null;
+    const comps = pres && pres.components ? pres.components : {};
+    const users = Object.values(comps).filter((c) => c && c.actions && c.actions.click && c.actions.click.target === id);
+    if (users.length) {
+      alert(`有 ${users.length} 个按钮的点击动作指向本面板；请先移除这些动作，再改为初始展开`);
+      renderProperties();
+      return;
+    }
+  }
+  mutate(`${open ? '开启' : '关闭'} ${id} 的初始展开`, (doc) => {
+    const c = doc.components[id];
+    if (!c) return;
+    if (open) delete c.initiallyOpen;
+    else c.initiallyOpen = false;
+  });
+}
+
 // ================= 模态框 =================
 export function openModal(title, contentEl, actions = []) {
   const root = document.getElementById('modal-root');
@@ -1031,9 +1205,10 @@ export function toast(msg, kind = 'info') {
 export function copySelection() {
   const c = selectedComp();
   if (!c || c.id === 'root') return;
+  const view = viewDoc();
   const tree = {};
   const collect = (id) => {
-    const comp = findComponent(state.doc, id);
+    const comp = findComponent(view, id);
     if (!comp) return;
     tree[id] = JSON.parse(JSON.stringify(comp));
     if (isContainer(comp)) (comp.children || []).forEach(collect);
@@ -1041,8 +1216,8 @@ export function copySelection() {
   collect(c.id);
   const resources = {};
   for (const comp of Object.values(tree)) {
-    if (comp.type === 'image' && comp.resourceId && state.doc.resources && state.doc.resources[comp.resourceId]) {
-      resources[comp.resourceId] = JSON.parse(JSON.stringify(state.doc.resources[comp.resourceId]));
+    if (comp.type === 'image' && comp.resourceId && view.resources && view.resources[comp.resourceId]) {
+      resources[comp.resourceId] = JSON.parse(JSON.stringify(view.resources[comp.resourceId]));
     }
   }
   state.clipboard = { tree, resources, rootId: c.id, name: c.name, copiedAt: Date.now() };

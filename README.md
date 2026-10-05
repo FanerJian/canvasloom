@@ -34,6 +34,8 @@ D:\UIForge\
 │   ├─ renderer.js       布局规则 → DOM/CSS（画布、预览、导出三处共用）
 │   ├─ validate.js       静态校验 + agent 操作(ops)执行器
 │   ├─ measure.js        基于实测快照的布局体检
+│   ├─ resolve.js        v3 变体解析器（presentation+style+overrides → v2 形状）
+│   ├─ runtime.js        v3 交互运行时（toggle/open/close、Esc、遮罩；运行态不入文件）
 │   └─ export-html.js    自包含预览页生成（独立页 / iframe 内嵌 / 无头渲染）
 ├─ app\                  编辑器前端
 ├─ cli\cli.js            agent 命令行实现
@@ -132,6 +134,36 @@ UIDoc v2 组件可选 `placement:{mode:'absolute'|'flow'}`。`absolute` 可放�
 
 ---
 
+## UIDoc v3（功能 / 风格 / 呈现 / 变体）
+
+v3 在 v2 之上加了一层「多方案」模型，用于**同一套界面的多种呈现与风格组合**（如游戏 UI 的六套方案 = 两呈现 × 三风格）。v2 项目可长期保持原样，不自动升级；v3 文档由编辑器/CLI 明确创建与维护。
+
+```jsonc
+{
+  "format": "uidoc", "version": 3,
+  "canvas": { "...": "与 v2 相同" },
+  "features":      { "bag": { "label": "背包", "data": { "slots": 20 } } },  // 共享数据源（组件用 featureId/bind 引用）
+  "styles":        { "dark": { "label": "暗色", "tokens": { "color.panel": "#111827" } } },  // 令牌包
+  "presentations": { "hud":  { "label": "常驻式", "components": { "root": { "...": "v2 同构组件树" } } } },
+  "variants":      [ { "id": "A1", "label": "常驻·暗色", "presentation": "hud", "style": "dark", "overrides": { "tokens": {}, "components": {} } } ],
+  "activeVariant": "A1"     // 唯一可保存的「当前状态」；预览运行态永不入文件
+}
+```
+
+要点（完整冻结决策见 `D:\UIForge_P0\商业级路线图.md` §4）：
+
+- **令牌引用**：组件 style 值写 `"$color.panel"`，渲染时替换为该变体所用风格的令牌值；布局字段（尺寸/位置）不允许 `$`。`overrides.tokens` 只允许微调基础风格已有的令牌键。
+- **功能绑定**：组件可选 `featureId`（指向 features）；text/button 可用 `bind.text: "feature:bag.items[0]"` 在渲染期直取功能数据做文案。
+- **交互**：button 可声明 `actions.click`（`toggle|open|close` + 目标面板）；container 可设 `initiallyOpen:false`（初始收起，作为动作目标）。预览与导出页内置交互运行时：点击开/关面板、Esc 全关并回焦点、点遮罩关闭；**运行状态只存在于内存/DOM，绝不写进设计文件**。
+- **校验**：每个 presentation 内每个 feature 至少被一个组件引用（`E_FEATURE_UNREACHABLE`）；顶层出现 `components` 拒绝（组件树只存在于 presentation 内）。
+- **ops 语义**：CLI/agent 的 `update/add/move/remove` 作用于 `activeVariant` 指向的 presentation 树；features/styles/presentations/variants/activeVariant 五段对 ops **只读**（`E_V3_SECTION_READONLY`）——这些段用编辑器维护。
+
+**编辑器（v3 项目）**：画布按 `activeVariant` 解析渲染（令牌替换+变体补丁已生效）；顶栏「变体」下拉切换显示（可撤销）；左栏「功能风格」标签页维护变体/功能/风格/呈现（含「复制为新呈现」）；「＋ 新建变体（向导）」分步完成 选呈现 → 选风格 → 命名生成并激活，一步可撤销。画布上的位置/样式编辑写入**当前呈现方案**（对该呈现的所有变体生效）；变体间的差异用风格令牌与 `overrides` 表达（覆盖补丁当前经 CLI/JSON 维护，面板会在被遮蔽时提示）。
+
+**CLI 导出指定变体**：`export <项目> --variant B2` 按该变体渲染离线页（省略时用 `activeVariant`）；v2 项目带 `--variant` 报 `E_VARIANT_FLAG_ON_V2`，未知变体列出可用项。导出包的 `preview.html` 对 v3 内嵌解析器与交互运行时，离线打开与编辑器预览行为一致。
+
+---
+
 ## agent 使用（cli.cmd）
 
 ```bat
@@ -141,7 +173,10 @@ D:\UIForge\cli.cmd inspect 示例页面 save_button --json       :: 指定组件
 D:\UIForge\cli.cmd apply 示例页面 --ops ops.json             :: 批量原子修改
 D:\UIForge\cli.cmd validate 示例页面 [--snapshot 快照.json]   :: 结构检查（+实测检查）
 D:\UIForge\cli.cmd export 示例页面                           :: 导出包
+D:\UIForge\cli.cmd export 示例页面 --variant B2              :: v3 项目按指定变体导出
 ```
+
+> **agent 注意**：`cli.cmd` 经 Git Bash 调用会挂起——脚本环境请直接 `node cli/cli.js <命令>`。
 
 `apply` 的 ops 文件（全部成功才落盘；任何一步非法则**整体拒绝**，原文件不动）：
 

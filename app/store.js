@@ -2,6 +2,7 @@
 // 编辑器状态中心：文档、历史（撤销/重做）、选择、缩放、模式
 // ============================================================
 import { findComponent, isContainer, LIMITS } from '../shared/protocol.js';
+import { resolveVariant } from '../shared/resolve.js';
 
 // 缩放/吸附等视图偏好的持久化键（画布行为偏好不进设计文档）
 const PREF_SNAP = 'uiforge:snap';
@@ -12,7 +13,9 @@ function prefOn(key, def = true) {
 }
 
 export const state = {
-  doc: null,          // 当前 UIDoc 文档
+  doc: null,          // 当前 UIDoc 文档（v3 时永远保存原文档：四段一概不动地进磁盘）
+  view: null,         // 设计视图：v2 即 doc 本体；v3 = 按 activeVariant 解析出的 v2 形状文档
+  viewError: null,    // v3 解析失败的结构化错误（画布显示错误卡，绝不回退默认变体）
   name: null,         // 项目名
   revision: 0,        // 与磁盘一致的修订号
   dirty: false,       // 有未保存修改
@@ -31,6 +34,38 @@ export const state = {
 
 // 预设块面板的场景过滤：null = 跟随文档模式；否则固定浏览某个模式的块
 state.paletteModeId = null;
+
+// ---------- v3 解析视图与编辑域（M5） ----------
+// 设计视图：v2 文档即 doc 本体；v3 文档按 activeVariant 解析成 v2 形状文档——
+// 画布/层级树/属性面板/测量/截图统一读 view。解析失败不回退默认变体：
+// viewError 记录结构化错误，画布显示错误卡（与导出页行为一致）。
+export function computeView() {
+  const doc = state.doc;
+  if (!doc || doc.version !== 3) { state.view = doc; state.viewError = null; return; }
+  try {
+    state.view = resolveVariant(doc, doc.activeVariant);
+    state.viewError = null;
+  } catch (e) {
+    state.view = null;
+    state.viewError = { code: e.code || 'E_RESOLVE', message: e.message || String(e) };
+  }
+}
+
+// 画布等读路径的入口：恒返回「当前应显示/测量」的 v2 形状文档（v3 解析失败时为 null）
+export function viewDoc() { return state.view; }
+
+// 编辑域：mutate 回调拿到的 doc。v2 即文档本体；v3 是浅拷贝、components 指向
+// activeVariant 指向的 presentation 组件树（冻结决策 11 的编辑器版语义）——
+// 既有全部编辑代码（doc.components[...]）零改动落进原树，保存时原文档整体写盘。
+export function scopeOf(doc) {
+  if (!doc || doc.version !== 3) return doc;
+  const variants = Array.isArray(doc.variants) ? doc.variants : [];
+  const v = variants.find((x) => x && x.id === doc.activeVariant);
+  const presId = v ? v.presentation : null;
+  const pres = presId && doc.presentations ? doc.presentations[presId] : null;
+  const comps = pres && pres.components ? pres.components : {};
+  return Object.assign({}, doc, { components: comps, __presentationId: presId || null });
+}
 
 export function setSnapEnabled(v) {
   state.snapEnabled = !!v;
@@ -75,6 +110,7 @@ export function loadProject(name, doc) {
   history.undo = [];
   history.redo = [];
   coalesce = { key: null, time: 0 };
+  computeView();
   emit({ reason: 'load' });
 }
 
@@ -86,16 +122,22 @@ export function adoptExternal(doc) {
   state.doc = doc;
   state.revision = doc.revision;
   state.dirty = false;
-  if (state.selection && !findComponent(doc, state.selection)) state.selection = null;
+  computeView();
+  if (state.selection && !findComponent(scopeOf(doc), state.selection)) state.selection = null;
   coalesce = { key: null, time: 0 };
   emit({ reason: 'external' });
 }
 
 // ---------- 变更（可撤销） ----------
-export function mutate(label, fn, opts = {}) {
+// mutate：组件编辑入口，回调拿「编辑域 scope」（v3 = 浅拷贝 + components 指向活动
+// presentation 树；嵌套字段的修改与新增键都会落进克隆文档）。
+// mutateDoc：v3 四段编辑入口（向导/功能风格面板），回调拿克隆的原文档本体——
+// 顶层字段赋值（如 activeVariant）只有在本体上才持久化。
+function applyMutation(label, fn, opts, scopeEdit) {
   const prev = state.doc;
   const next = structuredClone(prev);
-  fn(next);
+  if (next.version === 3 && next.resources == null) next.resources = {}; // 粘贴等路径会对 resources 赋值，先保证可别名写回
+  fn(scopeEdit ? scopeOf(next) : next);
   const now = Date.now();
   const canCoalesce = opts.coalesceKey && coalesce.key === opts.coalesceKey && (now - coalesce.time) < 900 && history.undo.length;
   if (!canCoalesce) {
@@ -105,18 +147,23 @@ export function mutate(label, fn, opts = {}) {
   coalesce = opts.coalesceKey ? { key: opts.coalesceKey, time: now } : { key: null, time: 0 };
   history.redo = [];
   state.doc = next;
+  computeView();
   state.dirty = true;
-  if (state.selection && !findComponent(next, state.selection)) state.selection = null;
+  if (state.selection && !findComponent(scopeOf(next), state.selection)) state.selection = null;
   emit({ reason: 'mutate', label, skipPanels: !!opts.skipPanels });
 }
+
+export function mutate(label, fn, opts = {}) { applyMutation(label, fn, opts, true); }
+export function mutateDoc(label, fn, opts = {}) { applyMutation(label, fn, opts, false); }
 
 export function undo() {
   if (!history.undo.length) return;
   history.redo.push({ doc: state.doc, label: 'redo' });
   const entry = history.undo.pop();
   state.doc = entry.doc;
+  computeView();
   state.dirty = true;
-  if (state.selection && !findComponent(state.doc, state.selection)) state.selection = null;
+  if (state.selection && !findComponent(scopeOf(state.doc), state.selection)) state.selection = null;
   coalesce = { key: null, time: 0 };
   emit({ reason: 'history' });
 }
@@ -126,8 +173,9 @@ export function redo() {
   history.undo.push({ doc: state.doc, label: 'undo' });
   const entry = history.redo.pop();
   state.doc = entry.doc;
+  computeView();
   state.dirty = true;
-  if (state.selection && !findComponent(state.doc, state.selection)) state.selection = null;
+  if (state.selection && !findComponent(scopeOf(state.doc), state.selection)) state.selection = null;
   coalesce = { key: null, time: 0 };
   emit({ reason: 'history' });
 }
@@ -157,18 +205,18 @@ export function setPreviewViewport(vp) {
   emit({ reason: 'preview-viewport' });
 }
 
-// ---------- 选择相关便捷 ----------
+// ---------- 选择相关便捷（读路径走解析视图：选中 id 与 presentation 原树同键） ----------
 export function selectedComp() {
-  return state.selection ? findComponent(state.doc, state.selection) : null;
+  return state.selection ? findComponent(viewDoc(), state.selection) : null;
 }
 export function selectedParent() {
   const c = selectedComp();
-  return c && c.parent ? findComponent(state.doc, c.parent) : null;
+  return c && c.parent ? findComponent(viewDoc(), c.parent) : null;
 }
 // 新组件的目标容器：选中容器 → 其内部；否则选中组件的父容器；否则根
 export function insertionContainer() {
   const c = selectedComp();
-  if (!c) return findComponent(state.doc, 'root');
+  if (!c) return findComponent(viewDoc(), 'root');
   if (isContainer(c)) return c;
-  return findComponent(state.doc, c.parent) || findComponent(state.doc, 'root');
+  return findComponent(viewDoc(), c.parent) || findComponent(viewDoc(), 'root');
 }

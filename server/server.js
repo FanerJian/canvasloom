@@ -104,6 +104,13 @@ async function loadModesSource() {
 async function loadProtocolSource() {
   return fs.readFile(path.join(SHARED_DIR, 'protocol.js'), 'utf8');
 }
+// v3 预览页需要变体解析器与交互运行时（M5 补齐 M3 遗留：编辑器侧导出/独立预览页此前缺这两个源码）
+async function loadResolveSource() {
+  return fs.readFile(path.join(SHARED_DIR, 'resolve.js'), 'utf8');
+}
+async function loadRuntimeSource() {
+  return fs.readFile(path.join(SHARED_DIR, 'runtime.js'), 'utf8');
+}
 async function loadHtml2Canvas() {
   try { return await fs.readFile(path.join(VENDOR_DIR, 'html2canvas.min.js'), 'utf8'); }
   catch { return ''; }
@@ -279,7 +286,11 @@ async function handleApi(req, res, url) {
     await fs.writeFile(path.join(dir, 'design.uidoc.json'), JSON.stringify(doc, null, 2), 'utf8'); files.push('design.uidoc.json');
     if (body.snapshot) { await fs.writeFile(path.join(dir, 'snapshot.json'), JSON.stringify(body.snapshot, null, 2), 'utf8'); files.push('snapshot.json'); }
     if (body.report) { await fs.writeFile(path.join(dir, 'report.json'), JSON.stringify(body.report, null, 2), 'utf8'); files.push('report.json'); }
-    const html = buildPreviewHtml({ doc, modesSource: await loadModesSource(), protocolSource: await loadProtocolSource(), rendererSource: await loadRendererSource(), html2canvasSource: await loadHtml2Canvas() });
+    const html = buildPreviewHtml({
+      doc, modesSource: await loadModesSource(), protocolSource: await loadProtocolSource(),
+      resolveSource: await loadResolveSource(), runtimeSource: await loadRuntimeSource(),
+      rendererSource: await loadRendererSource(), html2canvasSource: await loadHtml2Canvas(),
+    });
     await fs.writeFile(path.join(dir, 'preview.html'), html, 'utf8'); files.push('preview.html');
     if (body.screenshot) {
       const img = dataUrlToBuffer(body.screenshot);
@@ -294,7 +305,11 @@ async function handleApi(req, res, url) {
     if (!name) return badRequest(res, '项目名不合法');
     try {
       const doc = await readProject(name);
-      const html = buildPreviewHtml({ doc, modesSource: await loadModesSource(), protocolSource: await loadProtocolSource(), rendererSource: await loadRendererSource(), html2canvasSource: await loadHtml2Canvas() });
+      const html = buildPreviewHtml({
+        doc, modesSource: await loadModesSource(), protocolSource: await loadProtocolSource(),
+        resolveSource: await loadResolveSource(), runtimeSource: await loadRuntimeSource(),
+        rendererSource: await loadRendererSource(), html2canvasSource: await loadHtml2Canvas(),
+      });
       return send(res, 200, html, 'text/html; charset=utf-8');
     } catch (e) {
       return send(res, 404, { ok: false, error: e.message });

@@ -690,6 +690,80 @@ input[type="color"].p-input { padding: 2px 3px; height: 29px; flex: none; width:
 .es-actions { display: flex; gap: 8px; }
 .es-actions .tb-btn { height: 34px; padding: 0 16px; }
 
+/* ---------- M5：顶栏变体切换菜单 ---------- */
+#variant-menu { min-width: 300px; max-width: 380px; }
+.variant-item.current { color: var(--accent-strong); background: var(--accent-soft); }
+
+/* ---------- M5：v3 解析失败错误卡（画布内） ---------- */
+.ui-view-error {
+  margin: 48px auto; max-width: 560px; padding: 20px 24px;
+  border: 1px solid #fca5a5; border-radius: var(--radius-m);
+  background: #fef2f2; color: #7f1d1d; font-size: 13px; line-height: 1.9;
+}
+.ui-view-error .uve-head { font-weight: 700; font-size: 15px; margin-bottom: 8px; }
+
+/* ---------- M5：左栏「功能风格」面板 ---------- */
+.fs-panel { display: flex; flex-direction: column; gap: 14px; }
+.fs-sec-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text-2); margin-bottom: 6px;
+}
+.fs-list { display: flex; flex-direction: column; gap: 4px; }
+.fs-item {
+  position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  width: 100%; padding: 7px 26px 7px 10px; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-s);
+  cursor: pointer; transition: border-color .12s var(--ease), background .12s var(--ease);
+}
+.fs-item:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.fs-item.current { border-color: var(--accent-line); background: var(--accent-soft); }
+.fs-item strong { font-size: 12.5px; color: var(--text); }
+.fs-item span { font-size: 11.5px; color: var(--text-3); }
+.fs-badge {
+  position: absolute; right: 8px; top: 8px;
+  font-style: normal; font-size: 10.5px; color: var(--accent-strong);
+  background: var(--surface); border: 1px solid var(--accent-line);
+  border-radius: 999px; padding: 0 7px; line-height: 16px;
+}
+.fs-add-btn { width: 100%; margin-top: 6px; }
+.fs-add-row { display: flex; gap: 4px; margin-top: 6px; }
+.fs-add-row .fs-mini { flex: 1; min-width: 0; height: 28px; font-size: 12px; }
+.fs-item-edit { border: 1px solid var(--border); border-radius: var(--radius-s); background: var(--surface); }
+.fs-item-edit > summary {
+  padding: 7px 10px; font-size: 12.5px; cursor: pointer; color: var(--text);
+  list-style: revert; user-select: none;
+}
+.fs-item-edit > summary:hover { background: var(--surface-2); }
+.fs-edit-body { display: flex; flex-direction: column; gap: 6px; padding: 4px 10px 10px; border-top: 1px solid var(--border); }
+.fs-row { display: flex; align-items: center; gap: 4px; }
+.fs-row .fs-key { flex: none; width: 34px; font-size: 11.5px; color: var(--text-3); }
+.fs-row .p-input { min-width: 0; flex: 1; }
+.fs-data { font-family: Consolas, "JetBrains Mono", monospace; font-size: 11.5px; resize: vertical; }
+
+/* ---------- M5：变体向导（分步弹层） ---------- */
+.wizard-box { display: flex; flex-direction: column; gap: 12px; min-width: 380px; }
+.wiz-steps { display: flex; gap: 6px; flex-wrap: wrap; }
+.wiz-step {
+  font-size: 12px; color: var(--text-3);
+  border: 1px solid var(--border); border-radius: 999px; padding: 1px 10px;
+}
+.wiz-step.active { color: var(--accent-strong); border-color: var(--accent-line); background: var(--accent-soft); }
+.wiz-step.done { color: var(--ok); border-color: transparent; }
+.wiz-body { display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow: auto; padding-right: 2px; }
+.wiz-opt {
+  display: flex; align-items: flex-start; gap: 8px; width: 100%;
+  padding: 8px 10px; text-align: left;
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-s);
+  cursor: pointer; transition: border-color .12s var(--ease), background .12s var(--ease);
+}
+.wiz-opt:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.wiz-opt.active { border-color: var(--accent-line); background: var(--accent-soft); }
+.wiz-radio { color: var(--accent-strong); flex: none; line-height: 1.5; }
+.wiz-opt-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.wiz-opt-text strong { font-size: 12.5px; font-weight: 600; }
+.wiz-opt-text span { font-size: 11.5px; color: var(--text-3); }
+.wiz-nav { display: flex; justify-content: flex-end; gap: 8px; }
+
 /* ---------- 动效偏好 ---------- */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

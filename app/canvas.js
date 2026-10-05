@@ -4,7 +4,7 @@
 // 缩放手柄改尺寸：fill 轴拖后转固定、percent 轴按新比例重算（网格父容器中调跨格数）。
 // 画布通过 transform:scale 缩放，所有指针位移按 1/zoom 换算为设计坐标。
 // ============================================================
-import { state, mutate, select, setZoom, setSnapEnabled, PALETTE_MIME } from './store.js';
+import { state, mutate, select, setZoom, setSnapEnabled, PALETTE_MIME, viewDoc } from './store.js';
 import {
   findComponent, isContainer, normalizePadding, LIMITS, isAbsolutePlacement,
   COMPONENT_TYPES, defaultSizeFor, firstFreeGridCell, newComponent,
@@ -41,7 +41,9 @@ export function initCanvas() {
 
 export function renderCanvas() {
   if (!state.doc) return;
-  const doc = state.doc;
+  // v3 解析失败：显示结构化错误卡（错误码+信息），不白屏、不回退默认变体
+  if (state.viewError || !state.view) { renderViewError(); return; }
+  const doc = viewDoc();
   zoom = state.zoom;
   const w = doc.canvas.width, h = doc.canvas.height;
   el.scaler.style.width = w + 'px';
@@ -55,6 +57,35 @@ export function renderCanvas() {
   el.artboard.style.overflow = state.showOutsideCanvas ? 'visible' : 'hidden';
   renderDoc(el.artboard, doc, { viewport: { width: w, height: h }, canvasMode: true, showOverflow: state.showOutsideCanvas, editable: false });
   refreshOverlay();
+}
+
+// v3 文档解析失败的错误卡（与导出页 showRenderError 同语义）
+function renderViewError() {
+  const doc = state.doc;
+  const w = doc.canvas.width, h = doc.canvas.height;
+  zoom = state.zoom;
+  el.scaler.style.width = w + 'px';
+  el.scaler.style.height = h + 'px';
+  el.scaler.style.transform = `scale(${zoom})`;
+  el.stage.style.width = (w * zoom) + 'px';
+  el.stage.style.height = (h * zoom) + 'px';
+  el.artboard.style.background = '#ffffff';
+  el.artboard.style.overflow = 'hidden';
+  el.artboard.textContent = '';
+  el.overlay.textContent = '';
+  const card = document.createElement('div');
+  card.className = 'ui-view-error';
+  const head = document.createElement('div');
+  head.className = 'uve-head';
+  head.textContent = '✗ 设计视图无法渲染';
+  const code = document.createElement('div');
+  code.textContent = '错误码：' + (state.viewError.code || 'E_RESOLVE');
+  const msg = document.createElement('div');
+  msg.textContent = '信息：' + (state.viewError.message || '未知错误');
+  card.appendChild(head);
+  card.appendChild(code);
+  card.appendChild(msg);
+  el.artboard.appendChild(card);
 }
 
 // ---------- 坐标换算 ----------
@@ -105,12 +136,12 @@ export function refreshOverlay() {
   const ov = el.overlay;
   ov.textContent = '';
   const id = state.selection;
-  if (!id || !state.doc) return;
-  const comp = findComponent(state.doc, id);
+  if (!id || !state.doc || !state.view) return;
+  const comp = findComponent(viewDoc(), id);
   const node = el.artboard.querySelector(`[data-id="${CSS.escape(id)}"]`);
   if (!comp || !node) return;
   const r = nodeRect(node);
-  const parent = comp.parent ? findComponent(state.doc, comp.parent) : null;
+  const parent = comp.parent ? findComponent(viewDoc(), comp.parent) : null;
   const pmode = parent && parent.layout ? parent.layout.mode : null;
   const independentlyPlaced = isAbsolutePlacement(comp, parent) || (!!state.freeMove && !!parent);
 
@@ -164,7 +195,7 @@ let textEditor = null;
 function onDblClick(e) {
   const node = e.target.closest('#artboard [data-id]');
   if (!node) return;
-  const comp = findComponent(state.doc, node.dataset.id);
+  const comp = findComponent(viewDoc(), node.dataset.id);
   if (!comp) return;
   if (comp.type !== 'text' && comp.type !== 'button') return;
   e.preventDefault();
@@ -174,7 +205,7 @@ function onDblClick(e) {
 
 // 供右键菜单调用：按组件 id 进入文字编辑
 export function beginTextEditMode(id) {
-  const comp = findComponent(state.doc, id);
+  const comp = findComponent(viewDoc(), id);
   if (!comp || (comp.type !== 'text' && comp.type !== 'button')) return false;
   const node = el.artboard.querySelector(`[data-id="${CSS.escape(id)}"]`);
   if (!node) return false;
@@ -211,7 +242,7 @@ function closeTextEditor(commit) {
   textEditor = null;
   ed.remove();
   if (!commit) return;
-  const comp = findComponent(state.doc, id);
+  const comp = findComponent(viewDoc(), id);
   if (comp && (comp.text || '') !== value) {
     mutate(`编辑 ${id} 文字`, (doc) => { doc.components[id].text = value; });
   }
@@ -221,7 +252,7 @@ function closeTextEditor(commit) {
 function onContextMenu(e) {
   e.preventDefault();
   const node = e.target.closest('#artboard [data-id]');
-  const id = node ? node.dataset.id : (state.selection && findComponent(state.doc, state.selection) ? state.selection : null);
+  const id = node ? node.dataset.id : (state.selection && findComponent(viewDoc(), state.selection) ? state.selection : null);
   openContextMenu(e, id);
 }
 
@@ -253,11 +284,11 @@ function resolveDropContext(e) {
   let comp = null;
   if (e.target && e.target.closest) {
     const node = e.target.closest('#artboard [data-id]');
-    if (node) comp = findComponent(state.doc, node.dataset.id);
+    if (node) comp = findComponent(viewDoc(), node.dataset.id);
   }
   let container = null;
-  if (comp) container = isContainer(comp) ? comp : findComponent(state.doc, comp.parent);
-  if (!container) container = findComponent(state.doc, 'root');
+  if (comp) container = isContainer(comp) ? comp : findComponent(viewDoc(), comp.parent);
+  if (!container) container = findComponent(viewDoc(), 'root');
   let cNode = el.artboard.querySelector(`[data-id="${CSS.escape(container.id)}"]`);
   if (!cNode) cNode = el.artboard.firstElementChild;
   return {
@@ -269,9 +300,10 @@ function resolveDropContext(e) {
 
 function flowIndexAt(container, cNode, point) {
   const horizontal = container.layout.mode === 'horizontal';
+  const view = viewDoc();
   let idx = 0;
   for (const cid of container.children || []) {
-    if (state.doc.components[cid]?.placement?.mode === 'absolute') continue;
+    if (view.components[cid]?.placement?.mode === 'absolute') continue;
     const n = cNode.querySelector(`[data-id="${CSS.escape(cid)}"]`);
     if (!n) continue;
     const r = nodeRect(n);
@@ -284,7 +316,8 @@ function flowIndexAt(container, cNode, point) {
 // 与 moveFlow 同语义的插入线位置
 function flowIndicatorRect(container, cNode, idx) {
   const horizontal = container.layout.mode === 'horizontal';
-  const sibs = (container.children || []).filter((id) => state.doc.components[id]?.placement?.mode !== 'absolute');
+  const view = viewDoc();
+  const sibs = (container.children || []).filter((id) => view.components[id]?.placement?.mode !== 'absolute');
   const pr = parentContentRect(container, cNode);
   const before = sibs[idx - 1] ? cNode.querySelector(`[data-id="${CSS.escape(sibs[idx - 1])}"]`) : null;
   const after = sibs[idx] ? cNode.querySelector(`[data-id="${CSS.escape(sibs[idx])}"]`) : null;
@@ -383,7 +416,7 @@ function onPaletteDragOver(e) {
     paletteHover.cellBox.style.cssText = `left:${x}px;top:${y}px;width:${colW}px;height:${rowH}px;`;
   } else if (ctx.mode === 'free') {
     const payload = window.__uiforgeDrag;
-    const size = payload ? estimateDropSize(payload, state.doc.mode || 'generic') : { w: 120, h: 40 };
+    const size = payload ? estimateDropSize(payload, viewDoc().mode || 'generic') : { w: 120, h: 40 };
     paletteHover.ghostSize = size;
     paletteHover.ghost.style.cssText = `left:${ctx.point.x - size.w / 2}px;top:${ctx.point.y - size.h / 2}px;width:${size.w}px;height:${size.h}px;`;
   } else {
@@ -464,7 +497,7 @@ function onPaletteDrop(e) {
 let drag = null;
 
 function startDrag(e, node) {
-  const doc = state.doc;
+  const doc = viewDoc();
   const comp = findComponent(doc, node.dataset.id);
   if (!comp) return;
   const parent = comp.parent ? findComponent(doc, comp.parent) : null;
@@ -633,7 +666,8 @@ function moveFlow(e) {
   const parentEl = d.node.parentElement;
   const p = designPoint(e.clientX, e.clientY);
   const horizontal = d.pmode === 'horizontal';
-  const sibs = (d.parent.children || []).filter((cid) => cid !== d.id && state.doc.components[cid]?.placement?.mode !== 'absolute');
+  const view = viewDoc();
+  const sibs = (d.parent.children || []).filter((cid) => cid !== d.id && view.components[cid]?.placement?.mode !== 'absolute');
   let idx = 0;
   let indRect = null;
   const pr = parentContentRect(d.parent, parentEl);
@@ -796,10 +830,10 @@ function cleanupDragDom(d) {
 let resizing = null;
 function startResize(e, dir) {
   const id = state.selection;
-  const comp = findComponent(state.doc, id);
+  const comp = findComponent(viewDoc(), id);
   if (!comp) return;
   const node = el.artboard.querySelector(`[data-id="${CSS.escape(id)}"]`);
-  const parent = comp.parent ? findComponent(state.doc, comp.parent) : null;
+  const parent = comp.parent ? findComponent(viewDoc(), comp.parent) : null;
   resizing = {
     dir, id, comp, node, parent,
     pmode: parent && parent.layout ? parent.layout.mode : null,
@@ -989,17 +1023,18 @@ function percentBaseOf(parentComp, parentNode, axis) {
 
 // ---------- 外部工具：缩放适应 ----------
 export function fitZoom() {
-  if (!state.doc) return;
+  const view = viewDoc();
+  if (!view) return;
   const w = el.wrap.clientWidth - 48, h = el.wrap.clientHeight - 48;
-  const z = Math.min(w / state.doc.canvas.width, h / state.doc.canvas.height, 1);
+  const z = Math.min(w / view.canvas.width, h / view.canvas.height, 1);
   setZoom(Math.max(LIMITS.zoomMin, z));
 }
 
 // 供键盘微调用
 export function nudge(dx, dy, big) {
-  const comp = findComponent(state.doc, state.selection);
+  const comp = findComponent(viewDoc(), state.selection);
   if (!comp) return;
-  const parent = comp.parent ? findComponent(state.doc, comp.parent) : null;
+  const parent = comp.parent ? findComponent(viewDoc(), comp.parent) : null;
   const pmode = parent && parent.layout ? parent.layout.mode : null;
   const step = big ? 10 : 1;
   const name = comp.name || comp.id;

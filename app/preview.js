@@ -1,7 +1,7 @@
 // ============================================================
 // 预览与检查：真实视口预览、布局快照实测、检查报告、导出包
 // ============================================================
-import { state, select, setMode, setPreviewViewport } from './store.js';
+import { state, select, setMode, setPreviewViewport, viewDoc } from './store.js';
 import { renderDoc } from '../shared/renderer.js';
 import { validateDoc } from '../shared/validate.js';
 import { checkSnapshot } from '../shared/measure.js';
@@ -127,11 +127,13 @@ function nextFrame(n) {
 // ================= 检查布局 =================
 export async function runCheck() {
   const doc = state.doc;
-  const vp = state.previewViewport ? { width: state.previewViewport[0], height: state.previewViewport[1] } : { width: doc.canvas.width, height: doc.canvas.height };
+  const view = viewDoc();
+  const renderBase = view || doc; // v3 解析失败时退回原文档给出结构错误
+  const vp = state.previewViewport ? { width: state.previewViewport[0], height: state.previewViewport[1] } : { width: renderBase.canvas.width, height: renderBase.canvas.height };
   toast('正在实测布局……');
-  const snapshot = await measureHidden(doc, vp);
-  const staticReport = validateDoc(doc);
-  const measureReport = checkSnapshot(doc, snapshot);
+  const snapshot = await measureHidden(renderBase, vp);
+  const staticReport = validateDoc(doc); // 结构检查恒对原文档（v3 覆盖全部 presentation）
+  const measureReport = checkSnapshot(renderBase, snapshot);
   state.lastCheck = { snapshot, staticReport, measureReport, viewport: vp };
   window.__lastCheck = state.lastCheck; // 调试/自动化检查出口
   showReport();
@@ -201,16 +203,17 @@ export async function runExport() {
       const wantSnap = box.querySelector('#exp-snap').checked;
       closeModal();
       toast('正在生成导出包……');
+      const view = viewDoc() || doc; // 实测/截图按解析视图；结构与打包用原文档
       let snapshot = null, report = null, screenshot = null;
-      if (wantSnap || wantShot) snapshot = await measureHidden(doc, vp);
+      if (wantSnap || wantShot) snapshot = await measureHidden(view, vp);
       if (wantSnap) {
         const staticReport = validateDoc(doc);
-        const mReport = checkSnapshot(doc, snapshot);
+        const mReport = checkSnapshot(view, snapshot);
         report = { static: staticReport, measure: mReport,
           errors: [...staticReport.errors, ...mReport.errors], warnings: [...staticReport.warnings, ...mReport.warnings] };
       }
       if (wantShot) {
-        try { screenshot = await capturePng(doc, vp); }
+        try { screenshot = await capturePng(view, vp); }
         catch (e) { toast('截图失败：' + e.message, 'warn'); }
       }
       const r = await exportBundle({ name: state.name, doc, snapshot, report, screenshot });
