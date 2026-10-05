@@ -1,4 +1,4 @@
-# 为 CanvasLoom 生成图标 + 桌面快捷方式
+﻿# 为 CanvasLoom 生成图标 + 桌面快捷方式
 $ErrorActionPreference = 'Stop'
 # 脚本自定位：放在仓库根即可用，不依赖固定的安装路径
 $root = Split-Path -Parent $PSCommandPath
