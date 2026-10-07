@@ -1,3 +1,4 @@
+import { isPresentationDoc } from './protocol.js';
 // ============================================================
 // CanvasLoom M2 变体解析器 —— v3 文档的指定 variant → v2 形状文档
 // resolveVariant(doc, variantId) 产出可直接进入既有渲染/测量/校验/导出管线的
@@ -206,6 +207,7 @@ export function resolveVariant(doc, variantId) {
     delete c.actions;
     delete c.initiallyOpen;
     delete c.page;
+    delete c.intent; // 意图只进入原始文档/交接，不进入 v2 渲染视图。
     // 变体补丁先浅合并（补丁优先），令牌替换随后统一进行——补丁中的 $ 引用同样被替换
     if (patches && patches[id]) {
       c.style = Object.assign({}, c.style, patches[id]);
@@ -241,7 +243,7 @@ export function editScopeOf(doc, variantId) {
   if (!isPlainObject(doc)) {
     fail({ code: 'E_DOC_INVALID', message: 'editScopeOf：文档不是有效的 JSON 对象' });
   }
-  if (doc.version !== 3) return doc;
+  if (!isPresentationDoc(doc)) return doc;
   const variants = Array.isArray(doc.variants) ? doc.variants : null;
   const variant = variants ? variants.find((v) => isPlainObject(v) && v.id === variantId) : null;
   if (!variant) {

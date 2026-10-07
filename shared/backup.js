@@ -7,6 +7,7 @@
 // ============================================================
 import fsSync from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 export const V1_BACKUP_DIR = '.v1-backups';
 
@@ -47,4 +48,18 @@ export function backupV1BeforeWrite(projectFile, { now = new Date() } = {}) {
   }
   fsSync.writeFileSync(backupPath, raw, 'utf8');
   return { needed: true, backupPath, onDiskVersion };
+}
+
+// v4 首次保存前复制原始字节。独立目录与扩展名避免进入项目列表；失败必须终止保存。
+export function backupBeforeUpgrade(projectFile, targetVersion) {
+  if (!fsSync.existsSync(projectFile)) return { needed: false };
+  const raw = fsSync.readFileSync(projectFile);
+  const before = JSON.parse(raw.toString('utf8'));
+  if (targetVersion !== 4 || before.version >= targetVersion) return { needed: false };
+  const dir = path.join(path.dirname(projectFile), '.version-backups');
+  fsSync.mkdirSync(dir, { recursive: true });
+  const base = path.basename(projectFile).replace(/\.uidoc\.json$/, '');
+  const backupPath = path.join(dir, `${base}_rev${before.revision}_v${before.version}_${randomUUID()}.json`);
+  fsSync.writeFileSync(backupPath, raw, { flag: 'wx' });
+  return { needed: true, backupPath };
 }

@@ -1,3 +1,4 @@
+import { isPresentationDoc } from '../shared/protocol.js';
 // ============================================================
 // 预览与检查：真实视口预览、布局快照实测、检查报告、导出包
 // ============================================================
@@ -75,7 +76,7 @@ export function initPreviewBar() {
 //   · 隐藏起始页之外的页面图层（预览页从起始页打开）。
 // 隐藏组件在 checkSnapshot 中跳过可见性/规则/重叠结论（不产生误导性告警）。
 function runtimeInitialState(doc) {
-  if (!doc || doc.version !== 3) return { hiddenIds: [], startPageId: null };
+  if (!doc || !isPresentationDoc(doc)) return { hiddenIds: [], startPageId: null };
   const spec = extractInteractionSpec(doc, doc.activeVariant);
   return {
     hiddenIds: [...spec.initiallyClosed, ...spec.pages.slice(1)],

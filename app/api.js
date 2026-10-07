@@ -1,4 +1,6 @@
 // ============================================================
+
+export const EDITOR_CLIENT_ID = crypto.randomUUID();
 // 服务端 API 封装（同源 /api/*）
 // ============================================================
 
@@ -23,10 +25,10 @@ export async function createProject(name, mode, startLayout, template) {
   }));
 }
 
-export async function saveProject(name, doc, baseRevision) {
+export async function saveProject(name, doc, baseRevision, sessionId) {
   return toJson(await fetch('/api/project', {
     method: 'PUT', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, doc, baseRevision }),
+    body: JSON.stringify({ name, doc, baseRevision, actor: 'user', clientId: EDITOR_CLIENT_ID, sessionId }),
   }));
 }
 

@@ -44,13 +44,13 @@ test('compat：v3 原样通过（内存中不升级不改形）', () => {
   assert.equal(JSON.stringify(next), JSON.stringify(doc), 'v3 深拷贝必须与原文档逐字节一致');
 });
 
-test('version 4 被拒绝：校验器报 E_VERSION_UNSUPPORTED，兼容层同样拒绝', () => {
+test('version 5 被拒绝：校验器报 E_VERSION_UNSUPPORTED，兼容层同样拒绝', () => {
   const doc = loadSample();
-  doc.version = 4;
+  doc.version = 5;
   const report = validateDoc(doc);
   assert.equal(report.ok, false);
   assert.ok(hasCode(report, 'E_VERSION_UNSUPPORTED'), JSON.stringify(codes(report)));
-  assert.throws(() => inspectDocVersion({ format: 'uidoc', version: 4 }),
+  assert.throws(() => inspectDocVersion({ format: 'uidoc', version: 5 }),
     (e) => e instanceof CompatError && e.code === 'E_VERSION_UNSUPPORTED');
 });
 

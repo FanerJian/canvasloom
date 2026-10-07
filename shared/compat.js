@@ -8,12 +8,12 @@
 //   · v3 原样通过：内存中不升级、不改形、不降级写回 v2（升 v3 只发生在用户明确使用新能力时）。
 //   · 更高的版本号不支持：明确报错，不自动降级、不丢弃字段。
 // ============================================================
-import { DOC_VERSION, DOC_VERSION_V3, findComponent } from './protocol.js';
+import { DOC_VERSION, DOC_VERSION_V3, DOC_VERSION_V4, isPresentationDoc, findComponent } from './protocol.js';
 
-export const SUPPORTED_VERSIONS = [1, 2, 3];
+export const SUPPORTED_VERSIONS = [1, 2, 3, 4];
 
 export function isSupportedVersion(v) {
-  return v === 1 || v === 2 || v === DOC_VERSION_V3;
+  return SUPPORTED_VERSIONS.includes(v);
 }
 
 export class CompatError extends Error {
@@ -28,7 +28,7 @@ export function inspectDocVersion(doc) {
   const v = doc.version;
   if (!isSupportedVersion(v)) {
     throw new CompatError('E_VERSION_UNSUPPORTED',
-      `不支持的文档版本：${JSON.stringify(v)}（本版本支持 1、2 与 3）。文件保持原样未改动，请用与该版本匹配的程序打开。`);
+      `不支持的文档版本：${JSON.stringify(v)}（本版本支持 ${SUPPORTED_VERSIONS.join('、')}）。文件保持原样未改动，请用与该版本匹配的程序打开。`);
   }
   return { version: v, supported: true };
 }
@@ -39,7 +39,7 @@ export function inspectDocVersion(doc) {
 export function upgradeDoc(doc) {
   inspectDocVersion(doc);
   const next = JSON.parse(JSON.stringify(doc));
-  if (doc.version === DOC_VERSION_V3) return next; // v3 原样通过
+  if (isPresentationDoc(doc)) return next; // v3/v4 原样通过
   if (doc.version === DOC_VERSION) return next;
   // v1 升 v2：只改版本号。结构合法性交给 validateDoc（调用方保存前会校验）。
   next.version = DOC_VERSION;
@@ -65,6 +65,16 @@ export function upgradeDocToV3(doc) {
   next.presentations = { main: { label: '主呈现', components } };
   next.variants = [{ id: 'main', label: '默认', presentation: 'main', style: 'main', overrides: { tokens: {}, components: {} } }];
   next.activeVariant = 'main';
+  return next;
+}
+
+// 仅由用户明确启用设计意图的路径调用；保存时服务端另行备份原始字节。
+export function upgradeDocToV4(doc) {
+  const ready = upgradeDoc(doc);
+  if (ready.version === DOC_VERSION_V4) return ready;
+  const next = ready.version === DOC_VERSION_V3 ? ready : upgradeDocToV3(ready);
+  next.version = DOC_VERSION_V4;
+  next.intent = { goal: '', style: '' };
   return next;
 }
 

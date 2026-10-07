@@ -10,6 +10,9 @@ export const DOC_VERSION = 2;
 // v3 冻结版本号（商业级路线图 §4 决策 1）。newDoc 仍产 v2；v3 只由明确使用新能力的路径创建，
 // v1/v2 项目长期可不入 v3（不自动升级、不自动写回）。
 export const DOC_VERSION_V3 = 3;
+export const DOC_VERSION_V4 = 4;
+// v4 在 v3 呈现模型上增加设计意图；读写路径共用此判断，避免漏掉某一表面。
+export function isPresentationDoc(doc) { return doc?.version === 3 || doc?.version === 4; }
 export { UI_MODES, DEFAULT_MODE };
 
 // ---------- 布局模式 ----------

@@ -1,3 +1,4 @@
+import { isPresentationDoc } from '../shared/protocol.js';
 // ============================================================
 // 编辑器状态中心：文档、历史（撤销/重做）、选择、缩放、模式
 // ============================================================
@@ -20,6 +21,7 @@ export const state = {
   revision: 0,        // 与磁盘一致的修订号
   dirty: false,       // 有未保存修改
   editSeq: 0,         // 编辑序号：任何修改/撤销/载入都会递增（保存会话归属判定，S1）
+  sessionId: 0,       // 每次打开独立递增，同名项目重新打开也不接收旧会话的保存结果。
   draftUnavailable: null, // 草稿持久化失败原因（localStorage 容量不足等；null = 可用）
   selection: null,    // 主选中组件 id（属性面板/手柄跟随）
   multiSelection: null, // 多选列表（含主选中；length>1 时有效，S2b）
@@ -62,7 +64,7 @@ export function setActivePage(id) {
 }
 // 新建页面图层并立即切换为当前编辑页面；返回新页面 id
 export function addPage(name) {
-  if (!state.doc || state.doc.version !== 3) return null;
+  if (!state.doc || !isPresentationDoc(state.doc)) return null;
   let createdId = null;
   mutate(`新建页面「${name}」`, (doc) => {
     const comp = newPage(doc, name);
@@ -78,7 +80,7 @@ export function addPage(name) {
 // viewError 记录结构化错误，画布显示错误卡（与导出页行为一致）。
 export function computeView() {
   const doc = state.doc;
-  if (!doc || doc.version !== 3) { state.view = doc; state.viewError = null; return; }
+  if (!doc || !isPresentationDoc(doc)) { state.view = doc; state.viewError = null; return; }
   try {
     state.view = resolveVariant(doc, doc.activeVariant);
     state.viewError = null;
@@ -95,7 +97,7 @@ export function viewDoc() { return state.view; }
 // activeVariant 指向的 presentation 组件树（冻结决策 11 的编辑器版语义）——
 // 既有全部编辑代码（doc.components[...]）零改动落进原树，保存时原文档整体写盘。
 export function scopeOf(doc) {
-  if (!doc || doc.version !== 3) return doc;
+  if (!doc || !isPresentationDoc(doc)) return doc;
   const variants = Array.isArray(doc.variants) ? doc.variants : [];
   const v = variants.find((x) => x && x.id === doc.activeVariant);
   const presId = v ? v.presentation : null;
@@ -139,6 +141,8 @@ let coalesce = { key: null, time: 0 };
 // 调用方先把旧文档推成撤销记录，再以 keepHistory 载入新版本，
 // 使"采纳外部版本"成为一个可 Ctrl+Z 撤销的动作，而不是清空历史的数据丢失。
 export function loadProject(name, doc, opts = {}) {
+  state.sessionId++;
+  state.multiSelection = null;
   state.doc = doc;
   state.name = name;
   state.revision = doc.revision;
@@ -208,7 +212,7 @@ export function adoptDraft(doc) {
 function applyMutation(label, fn, opts, scopeEdit) {
   const prev = state.doc;
   const next = structuredClone(prev);
-  if (next.version === 3 && next.resources == null) next.resources = {}; // 粘贴等路径会对 resources 赋值，先保证可别名写回
+  if (isPresentationDoc(next) && next.resources == null) next.resources = {}; // 粘贴等路径会对 resources 赋值，先保证可别名写回
   fn(scopeEdit ? scopeOf(next) : next);
   const now = Date.now();
   const canCoalesce = opts.coalesceKey && coalesce.key === opts.coalesceKey && (now - coalesce.time) < 900 && history.undo.length;

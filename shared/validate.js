@@ -1,3 +1,4 @@
+import { isPresentationDoc } from './protocol.js';
 // ============================================================
 // UIDoc 静态校验器 —— 浏览器/Node 通用，纯函数
 // 同时校验 v1/v2/v3 文档（版本差异见 shared/compat.js 与商业级路线图 §4）；
@@ -15,6 +16,7 @@ import {
 } from './protocol.js';
 import { UI_MODES } from './modes.js';
 import { isSupportedVersion, SUPPORTED_VERSIONS } from './compat.js';
+import { validateIntent, checkAiPolicy } from './intent.js';
 
 const COLOR_RE = /^(#[0-9a-fA-F]{3}|#[0-9a-fA-F]{4}|#[0-9a-fA-F]{6}|#[0-9a-fA-F]{8}|rgba?\(\s*[\d.]+\s*,\s*[\d.]+\s*,\s*[\d.]+\s*(,\s*[\d.]+\s*)?\))$/;
 const FIELD_KEYS = new Set(STYLE_FIELDS.map((f) => f.key));
@@ -50,13 +52,14 @@ export function validateDoc(doc) {
   }
   // 版本分流（冻结决策 10）：v3 走独立校验分支；version>3 明确拒绝；
   // 以下 v1/v2 路径保持历史行为不变（现有测试为硬准绳）。
-  if (doc.version === DOC_VERSION_V3) return validateDocV3(doc);
-  if (typeof doc.version === 'number' && doc.version > 3) {
+  if (isPresentationDoc(doc)) return validateDocV3(doc);
+  if (typeof doc.version === 'number' && doc.version > 4) {
     issue(issues, 'error', 'E_VERSION_UNSUPPORTED',
-      `不支持的文档版本：${JSON.stringify(doc.version)}（本实现最高支持版本 ${DOC_VERSION_V3}）。文件未被改动，请用匹配版本的程序处理。`);
+      `不支持的文档版本：${JSON.stringify(doc.version)}（本实现最高支持版本 4）。文件未被改动，请用匹配版本的程序处理。`);
     return pack(issues);
   }
   if (doc.format !== 'uidoc') issue(issues, 'error', 'E_FORMAT', '文档 format 必须为 "uidoc"，当前为 ' + JSON.stringify(doc.format));
+  if (doc.intent !== undefined) issue(issues, 'error', 'E_VERSION_FIELD', '设计意图仅支持 UIDoc v4，请先明确启用', 'root', 'intent');
   if (!isSupportedVersion(doc.version)) {
     issue(issues, 'error', 'E_VERSION',
       `不支持的文档版本：${JSON.stringify(doc.version)}（当前支持版本：${SUPPORTED_VERSIONS.join(' 与 ')}）。文件未被改动，请用匹配版本的程序处理。`);
@@ -391,6 +394,7 @@ function validateTypeFields(issues, comps, ctx, c) {
   // 未在类型定义中的杂散字段（白名单外；v3 追加四个新字段；placement 为 v2 独立摆放语义，呈现树同构沿用）
   const known = new Set(['id', 'type', 'name', 'purpose', 'parent', 'children', 'layout', 'size', 'style', 'flags', 'position', 'area', 'placement']);
   if (ctx.v3) for (const k of V3_COMPONENT_EXTRA_FIELDS) known.add(k);
+  if (ctx.version === 4) known.add('intent');
   // placement（独立摆放/显式排列）校验：v1 不支持；v2/v3 按以下规则
   if (c.placement != null) {
     if (ctx.version === 1) issue(issues, 'error', 'E_VERSION_FIELD', `UIDoc v1 不支持组件 placement 字段（${c.id}）；请使用 v2`, c.id, 'placement');
@@ -552,6 +556,7 @@ const V3_VARIANT_FIELDS = new Set(['id', 'label', 'presentation', 'style', 'over
 
 function validateDocV3(doc) {
   const issues = [];
+  if (doc.version === 4) issues.push(...validateIntent(doc).errors);
   if (doc.format !== 'uidoc') issue(issues, 'error', 'E_FORMAT', '文档 format 必须为 "uidoc"，当前为 ' + JSON.stringify(doc.format));
   if (!isInt(doc.revision) || doc.revision < 1) issue(issues, 'error', 'E_REVISION', 'revision 必须为正整数');
   if (doc.mode != null && !UI_MODES[doc.mode]) {
@@ -571,7 +576,7 @@ function validateDocV3(doc) {
   for (const k of Object.keys(doc)) {
     if (k === 'components') {
       issue(issues, 'error', 'E_V3_COMPONENTS_FORBIDDEN', 'v3 文档顶层不允许 components 段（组件树位于各 presentation 内）', 'root', 'components');
-    } else if (!V3_TOP_LEVEL_FIELDS.has(k)) {
+    } else if (!V3_TOP_LEVEL_FIELDS.has(k) && !(doc.version === 4 && k === 'intent')) {
       issue(issues, 'error', 'E_FIELD_UNKNOWN', `v3 顶层未知字段：${k}。可用：${[...V3_TOP_LEVEL_FIELDS].join('、')}`, null, k);
     }
   }
@@ -788,7 +793,7 @@ export class ApplyError extends Error {
 export function applyOps(doc, ops) {
   if (!Array.isArray(ops)) throw new ApplyError({ code: 'E_OPS', message: 'ops 必须为数组' });
   // v3（冻结决策 11）：组件 ops 作用于 activeVariant 指向的 presentation 树
-  if (doc && typeof doc === 'object' && doc.version === DOC_VERSION_V3) return applyOpsV3(doc, ops);
+  if (doc && typeof doc === 'object' && isPresentationDoc(doc)) return applyOpsV3(doc, ops);
   const next = JSON.parse(JSON.stringify(doc));
   for (let i = 0; i < ops.length; i++) {
     try { applyOne(next, ops[i]); }
@@ -828,6 +833,10 @@ function applyOpsV3(doc, ops) {
       throw new ApplyError({ code: 'E_OP_FAILED', message: '第 ' + (i + 1) + ' 个操作执行失败：' + e.message, opIndex: i });
     }
   }
+  const policy = checkAiPolicy(doc, next);
+  if (!policy.ok) {
+    throw new ApplyError({ ...policy.errors[0], message: '修改违反 AI 保护规则，已整体拒绝：' + policy.errors[0].message, errors: policy.errors });
+  }
   const report = validateDoc(next);
   if (!report.ok) {
     const first = report.errors[0];
@@ -858,7 +867,7 @@ function opUpdateDocument(doc, op) {
     throw new ApplyError({ code: 'E_OP', message: 'updateDocument 操作缺少 fields 对象' });
   }
   const allowed = new Set(['canvas', 'mode', 'name']);
-  const v3Readonly = doc.version === DOC_VERSION_V3
+  const v3Readonly = isPresentationDoc(doc)
     ? new Set(['features', 'styles', 'presentations', 'variants', 'activeVariant', 'components'])
     : null;
   for (const k of Object.keys(fields)) {
@@ -908,7 +917,7 @@ function opAdd(doc, op) {
   if (spec.type && !COMPONENT_TYPES[spec.type]) throw new ApplyError({ code: 'E_TYPE_UNKNOWN', message: '未知组件类型：' + JSON.stringify(spec.type), componentId: spec.id });
   // 未知字段直接拒绝（不允许静默丢弃——agent 必须知道字段没有被采纳）
   const addAllowed = new Set(['id', 'type', 'name', 'purpose', 'text', 'placeholder', 'value', 'resourceId', 'fit', 'orientation', 'thickness', 'size', 'style', 'flags', 'position', 'area', 'layout', 'placement']);
-  if (doc.version === DOC_VERSION_V3) for (const k of V3_COMPONENT_EXTRA_FIELDS) addAllowed.add(k);
+  if (isPresentationDoc(doc)) for (const k of V3_COMPONENT_EXTRA_FIELDS) addAllowed.add(k);
   for (const k of Object.keys(spec)) {
     if (!addAllowed.has(k)) {
       throw new ApplyError({ code: 'E_FIELD_UNKNOWN', message: `add 的 component 含未知字段：${k}（可用字段：${[...addAllowed].join('、')}）`, componentId: spec.id, field: k });
@@ -927,7 +936,7 @@ function opAdd(doc, op) {
   });
   // 应用调用方给定的其余字段
   const allowed = ['name', 'purpose', 'text', 'placeholder', 'value', 'resourceId', 'fit', 'orientation', 'thickness', 'size', 'style', 'flags', 'position', 'area', 'layout', 'placement'];
-  if (doc.version === DOC_VERSION_V3) allowed.push(...V3_COMPONENT_EXTRA_FIELDS);
+  if (isPresentationDoc(doc)) allowed.push(...V3_COMPONENT_EXTRA_FIELDS);
   for (const k of allowed) {
     if (spec[k] !== undefined) {
       if (k === 'layout' && !isContainer(comp)) throw new ApplyError({ code: 'E_FIELD_INVALID', message: `组件 "${comp.id}" 不是容器，不能设置 layout`, componentId: comp.id });
@@ -948,7 +957,8 @@ function opUpdate(doc, op) {
   const fields = op.fields;
   if (!fields || typeof fields !== 'object') throw new ApplyError({ code: 'E_OP', message: 'update 操作缺少 fields 对象' });
   const direct = ['name', 'purpose', 'text', 'placeholder', 'value', 'resourceId', 'fit', 'orientation', 'thickness', 'size', 'style', 'flags', 'position', 'area', 'layout', 'placement'];
-  if (doc.version === DOC_VERSION_V3) direct.push(...V3_COMPONENT_EXTRA_FIELDS);
+  if (fields.intent !== undefined) throw new ApplyError({ code: 'E_AI_POLICY', message: 'AI 不得设置或解除组件设计意图；请在编辑器中手动设置', componentId: op.id, field: 'intent' });
+  if (isPresentationDoc(doc)) direct.push(...V3_COMPONENT_EXTRA_FIELDS);
   for (const k of Object.keys(fields)) {
     if (!direct.includes(k)) throw new ApplyError({ code: 'E_FIELD_UNKNOWN', message: `update 不支持字段：${k}`, componentId: op.id, field: k });
     if (k === 'layout' && !isContainer(comp)) throw new ApplyError({ code: 'E_FIELD_INVALID', message: `组件 "${comp.id}" 不是容器，不能设置 layout`, componentId: op.id, field: 'layout' });

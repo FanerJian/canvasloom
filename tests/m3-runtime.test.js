@@ -268,7 +268,7 @@ test('export-html：v3 预览页包含 resolve/runtime 内联、桥接与按变�
   assert.match(html, /window\.CanvasLoomResolve = /, 'resolve 桥接');
   assert.match(html, /window\.CanvasLoomRuntime = /, 'runtime 桥接');
   assert.match(html, /window\.CANVASLOOM_VARIANT = /, '变体注入点');
-  assert.match(html, /DOC\.version === 3/, 'v3 分支门禁');
+  assert.match(html, /DOC\.version === 3 \|\| DOC\.version === 4/, 'v3/v4 呈现分支门禁');
   assert.match(html, /resolveVariant\(DOC, vid\)/, '按变体解析成 v2 形状再渲染');
   const iResolve = html.indexOf('function resolveVariant(');
   const iRuntime = html.indexOf('function initInteractions(');

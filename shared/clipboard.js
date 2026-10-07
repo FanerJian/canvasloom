@@ -1,3 +1,4 @@
+import { isPresentationDoc } from './protocol.js';
 // ============================================================
 // CanvasLoom 复制/粘贴/副本语义（S1 B04/B05）—— 浏览器与 Node 通用纯函数
 // 原则（问题与证据.md B04/B05 的修复约定）：
@@ -45,7 +46,7 @@ function collectFeatureRefs(comp, into) {
 // 渲染解析（resolveVariant）就按这个范围替换 $ 引用，粘贴的令牌保留判断以它为准。
 function activeVariantTokenScope(doc) {
   const set = new Set();
-  if (!doc || doc.version !== 3) return set;
+  if (!doc || !isPresentationDoc(doc)) return set;
   const variant = (Array.isArray(doc.variants) ? doc.variants : []).find((v) => v && v.id === doc.activeVariant);
   if (!variant) return set;
   const st = doc.styles && doc.styles[variant.style];
@@ -169,7 +170,7 @@ export function pasteSnapshotIntoDoc(doc, clip, targetParentId, opts = {}) {
 
   // ---- 功能合并（v3 目标）：冲突不覆盖，生成新 id 并在粘贴树内重映射 ----
   const fidMap = {};
-  if (doc.version === 3) {
+  if (isPresentationDoc(doc)) {
     doc.features = doc.features || {};
     for (const [fid, feat] of Object.entries(clip.features || {})) {
       if (!doc.features[fid]) {
@@ -226,6 +227,10 @@ export function pasteSnapshotIntoDoc(doc, clip, targetParentId, opts = {}) {
     copy.id = nid;
     copy.parent = pid;
     copy.name = (src.name || srcId) + ' 副本';
+    if (doc.version !== 4 && copy.intent !== undefined) {
+      delete copy.intent;
+      strippedFields.add('intent（目标未启用设计意图）');
+    }
     // 令牌冻结（目标令牌表中没有的引用换为字面量）
     if (copy.style && typeof copy.style === 'object') {
       for (const k of Object.keys(copy.style)) {
@@ -238,7 +243,7 @@ export function pasteSnapshotIntoDoc(doc, clip, targetParentId, opts = {}) {
     if (copy.type === 'image' && copy.resourceId && ridMap[copy.resourceId] != null) {
       copy.resourceId = ridMap[copy.resourceId];
     }
-    if (doc.version === 3) {
+    if (isPresentationDoc(doc)) {
       if (copy.featureId && fidMap[copy.featureId]) copy.featureId = fidMap[copy.featureId];
       if (copy.bind && typeof copy.bind.text === 'string') copy.bind.text = remapBindText(copy.bind.text, fidMap);
       // 页面图层只能挂在 root 直接子级：粘贴到其他容器时剥除 page 标记（明确提示）
@@ -278,7 +283,7 @@ export function pasteSnapshotIntoDoc(doc, clip, targetParentId, opts = {}) {
   }
 
   if (strippedFields.size) {
-    notices.push({ level: 'info', message: `目标为 v${doc.version} 文档：已剥除 v3 专属字段（${[...strippedFields].join('、')}），粘贴的组件按 v2 语义生效` });
+    notices.push({ level: 'info', message: `目标为 v${doc.version} 文档：已移除该版本不支持的字段（${[...strippedFields].join('、')}）` });
   }
   if (stripPage.length) {
     notices.push({ level: 'info', message: `组件 ${stripPage.join('、')} 在来源中是页面图层；页面只能挂在根容器下，粘贴时已按普通容器处理` });

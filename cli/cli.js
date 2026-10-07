@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isPresentationDoc } from '../shared/protocol.js';
 // ============================================================
 // CanvasLoom agent 命令行入口（零依赖，不访问网络，不启动子进程）
 //   catalog                      查看支持的组件、属性和布局模式
@@ -20,7 +21,7 @@ import { buildPreviewHtml } from '../shared/export-html.js';
 import { publishExportDir, exportTaskSuffix } from '../shared/exportdir.js';
 import { withFileLock, lockFileFor } from '../shared/filelock.js';
 import { backupV1BeforeWrite } from '../shared/backup.js';
-import { inspectDocVersion, upgradeDoc, isSupportedVersion, CompatError } from '../shared/compat.js';
+import { inspectDocVersion, upgradeDoc, isSupportedVersion, SUPPORTED_VERSIONS, CompatError } from '../shared/compat.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -96,7 +97,7 @@ function resolveProject(arg) {
   if (doc.format !== 'uidoc') fail('E_FORMAT', '不是 UIDoc 文档：' + file);
   if (!isSupportedVersion(doc.version)) {
     fail('E_VERSION_UNSUPPORTED',
-      `不支持的文档版本：${JSON.stringify(doc.version)}（本 CLI 支持 1、2 与 3）。文件保持原样未改动，请用与该版本匹配的程序处理：${file}`);
+      `不支持的文档版本：${JSON.stringify(doc.version)}（本 CLI 支持 ${SUPPORTED_VERSIONS.join('、')}）。文件保持原样未改动，请用与该版本匹配的程序处理：${file}`);
   }
   return { file, doc };
 }
@@ -146,6 +147,8 @@ function catalog() {
   }
   const data = {
     format: 'uidoc', version: P.DOC_VERSION,
+    supportedVersions: SUPPORTED_VERSIONS,
+    designIntent: { version: 4, project: '{goal,style}', component: '{precision:rough|exact|ai,ai:open|preserve}', policy: 'apply 自动校验保护规则；AI 不得改写意图、解除保护或降级版本。保留相对父容器的几何声明和既有结构，可完善样式与内部内容。' },
     modes: Object.fromEntries(Object.entries(P.UI_MODES).map(([id, m]) => [
       id, { label: m.label, desc: m.desc, canvas: m.canvas, blocks: (m.blocks || []).map((b) => b.label) },
     ])),
@@ -240,13 +243,14 @@ function inspect() {
       if (c.position) node.position = c.position;
       if (c.placement) node.placement = c.placement;
       if (c.area) node.area = c.area;
+      if (c.intent) node.intent = c.intent;
       if (P.isContainer(c)) node.children = (c.children || []).map(tree);
       return node;
     };
     return out({ ok: true, name: doc.name, revision: doc.revision, version: doc.version,
       variant: isV3Scope ? scope.__variantId : undefined,
       presentation: isV3Scope ? scope.__presentationId : undefined,
-      canvas: doc.canvas, tree: tree('root'),
+      canvas: doc.canvas, intent: doc.intent, tree: tree('root'),
       component: compId ? P.findComponent(scope, compId) : undefined });
   }
   const L = [];
@@ -362,8 +366,8 @@ async function exportProj() {
   // 变体存在性在这里校验（读 doc.variants），页面里的解析器只做最终把关。
   let variantId = null;
   if ('variant' in flags) {
-    if (doc.version !== 3) {
-      fail('E_VARIANT_FLAG_ON_V2', `--variant 只支持 v3 文档（当前文档版本 ${doc.version}），未导出`);
+    if (!isPresentationDoc(doc)) {
+      fail('E_VARIANT_FLAG_ON_V2', `--variant 只支持 v3/v4 文档（当前文档版本 ${doc.version}），未导出`);
     }
     const ids = (Array.isArray(doc.variants) ? doc.variants : []).map((v) => (v && v.id != null ? String(v.id) : null)).filter(Boolean);
     if (typeof flags.variant !== 'string' || !flags.variant || !ids.includes(flags.variant)) {
@@ -373,7 +377,7 @@ async function exportProj() {
     }
     variantId = flags.variant;
   }
-  const effectiveVariant = doc.version === 3 ? (variantId || doc.activeVariant || null) : null;
+  const effectiveVariant = isPresentationDoc(doc) ? (variantId || doc.activeVariant || null) : null;
   // 先校验再创建任何文件：非法文档直接结构化拒绝，不留下半成品导出包
   const staticReport = validateDoc(doc);
   if (!staticReport.ok) {
@@ -403,7 +407,7 @@ async function exportProj() {
   const readme = [
     'CanvasLoom 导出包（CLI）',
     '',
-    '· design.uidoc.json  设计文件（UIDoc v' + P.DOC_VERSION + '，修订号 ' + doc.revision + '）',
+    '· design.uidoc.json  设计文件（UIDoc v' + doc.version + '，修订号 ' + doc.revision + '）',
     '· preview.html       自包含网页预览（双击打开，无需本编辑器）：',
     '                     - 测量布局：输出每个组件的实际位置尺寸',
     '                     - 下载快照：保存 snapshot.json（供 cli.cmd validate --snapshot 复检）',

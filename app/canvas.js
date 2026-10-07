@@ -56,6 +56,10 @@ export function renderCanvas() {
   // 预览/导出的最终裁剪仍由设计规则（根容器 overflow 与视口）决定
   el.artboard.style.overflow = state.showOutsideCanvas ? 'visible' : 'hidden';
   renderDoc(el.artboard, doc, { viewport: { width: w, height: h }, canvasMode: true, showOverflow: state.showOutsideCanvas, editable: false });
+  for (const node of el.artboard.querySelectorAll('.uiw-empty')) {
+    const comp = doc.components[node.dataset.id];
+    node.dataset.regionLabel = comp?.id === 'root' ? '画布' : (comp?.name || '区域');
+  }
   applyPageVisibility();
   refreshOverlay();
 }

@@ -27,6 +27,7 @@ const BOOTSTRAP = String.raw`
 (function () {
   'use strict';
   var DOC = JSON.parse(document.getElementById('doc-data').textContent);
+  var PRESENTATION_DOC = DOC.version === 3 || DOC.version === 4;
   var params = new URLSearchParams(location.search);
   var MODE = params.get('static') ? 'static' : (params.get('embed') || window.parent !== window ? 'embed' : 'interactive');
   // 独立交互页只有 #frame（视口容器），内嵌/静态页用 #app；统一解析
@@ -54,7 +55,7 @@ const BOOTSTRAP = String.raw`
   function renderAt(w, h) {
     try {
       var docToRender = DOC;
-      if (DOC.version === 3) {
+      if (PRESENTATION_DOC) {
         if (!(window.CanvasLoomResolve && typeof window.CanvasLoomResolve.resolveVariant === 'function')) {
           var err0 = new Error('变体解析器（shared/resolve.js）未随页面加载，无法渲染 v3 文档');
           err0.code = 'E_RESOLVE_SOURCE_MISSING';
@@ -79,7 +80,7 @@ const BOOTSTRAP = String.raw`
   var runtime = null;
   function setupInteractions() {
     if (runtime) { runtime.destroy(); runtime = null; }
-    if (DOC.version !== 3 || MODE === 'static') return;
+    if (!PRESENTATION_DOC || MODE === 'static') return;
     if (!(window.CanvasLoomRuntime && typeof window.CanvasLoomRuntime.initInteractions === 'function')) return;
     var vid = (typeof window.CANVASLOOM_VARIANT !== 'undefined' && window.CANVASLOOM_VARIANT) || DOC.activeVariant;
     var rootEl = app.firstElementChild;

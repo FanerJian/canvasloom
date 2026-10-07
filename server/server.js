@@ -17,7 +17,8 @@ import { applyTemplate } from '../shared/templates.js';
 import { UI_MODES, DEFAULT_MODE } from '../shared/modes.js';
 import { buildPreviewHtml } from '../shared/export-html.js';
 import { withFileLock, lockFileFor } from '../shared/filelock.js';
-import { backupV1BeforeWrite } from '../shared/backup.js';
+import { backupV1BeforeWrite, backupBeforeUpgrade } from '../shared/backup.js';
+import { checkAiPolicy } from '../shared/intent.js';
 import { publishExportDir, exportTaskSuffix } from '../shared/exportdir.js';
 import { inspectDocVersion, isSupportedVersion, SUPPORTED_VERSIONS, CompatError } from '../shared/compat.js';
 
@@ -46,6 +47,10 @@ const MIME = {
 
 // ---------- SSE ----------
 const sseClients = new Set();
+const projectMtimes = new Map();
+function rememberProjectWrite(name, file) {
+  try { projectMtimes.set(name, fsSync.statSync(file).mtimeMs); } catch { /* 轮询下一次重新读取 */ }
+}
 function broadcast(obj) {
   const line = 'data: ' + JSON.stringify(obj) + '\n\n';
   for (const res of sseClients) { try { res.write(line); } catch { sseClients.delete(res); } }
@@ -130,7 +135,7 @@ async function handleApi(req, res, url) {
   const p = url.pathname;
 
   if (p === '/api/hello' && req.method === 'GET') {
-    return send(res, 200, { ok: true, name: 'CanvasLoom', root: ROOT, projects: PROJECTS_DIR, protocolVersion: 2 });
+    return send(res, 200, { ok: true, name: 'CanvasLoom', root: ROOT, projects: PROJECTS_DIR, protocolVersion: 4, supportedVersions: SUPPORTED_VERSIONS, capabilities: { designIntent: true, aiPolicy: true } });
   }
 
   if (p === '/api/events' && req.method === 'GET') {
@@ -199,6 +204,7 @@ async function handleApi(req, res, url) {
         if (fsSync.existsSync(file)) return { exists: true };
         const doc = applyTemplate(newDoc(name, mode, startLayout), templateId);
         atomicWriteSync(file, JSON.stringify(doc, null, 2));
+        rememberProjectWrite(name, file);
         return { ok: true, doc };
       });
     } catch (e) {
@@ -220,20 +226,30 @@ async function handleApi(req, res, url) {
       return send(res, 422, { ok: false, error: `不支持的文档版本：${JSON.stringify(doc.version)}（支持 ${SUPPORTED_VERSIONS.join('、')}），未保存` });
     }
     const base = body.baseRevision;
+    // 编辑器明确声明手动编辑；外部整文档提交默认视为 AI，不能悄悄解除保护。
+    const actor = body.actor || 'ai';
+    if (!['user', 'ai'].includes(actor)) return badRequest(res, 'actor 须为 user 或 ai');
     if (!Number.isInteger(base)) return badRequest(res, '缺少 baseRevision');
     const file = projectFile(name);
     let result;
     let resultBackup = null;
+    let versionBackup = null;
     try {
       // 读修订号 → 比较 → 备份 → 校验 → 写入必须在同一把锁内完成（事务），
       // 否则两个并发保存都会基于同一修订号通过比较、互相覆盖。
       result = withFileLock(lockFileFor(file), () => {
         let currentRevision = 0;
+        let currentDoc = null;
         if (fsSync.existsSync(file)) {
-          try { currentRevision = JSON.parse(fsSync.readFileSync(file, 'utf8')).revision || 0; } catch { currentRevision = 0; }
+          try { currentDoc = JSON.parse(fsSync.readFileSync(file, 'utf8')); currentRevision = currentDoc.revision || 0; } catch { currentRevision = 0; }
         }
         if (base !== currentRevision) {
           return { conflict: true, currentRevision };
+        }
+        if (currentDoc?.version === 4 && doc.version !== 4) return { invalid: true, errors: [{ code: 'E_VERSION_DOWNGRADE', field: 'version', message: '项目已启用设计意图，不能通过旧版本覆盖保存；请重新启用设计意图后保存' }] };
+        if (actor === 'ai') {
+          const policy = checkAiPolicy(currentDoc, doc);
+          if (!policy.ok) return { invalid: true, errors: policy.errors };
         }
         // 磁盘上还是 v1 的项目，第一次被新版覆盖保存前先做可恢复备份；备份失败则不写入
         try {
@@ -248,7 +264,14 @@ async function handleApi(req, res, url) {
         if (!report.ok) {
           return { invalid: true, errors: report.errors };
         }
+        try {
+          const bk = backupBeforeUpgrade(file, doc.version);
+          if (bk.needed) versionBackup = bk.backupPath;
+        } catch (e) {
+          return { backupFailed: true, message: '升级前备份失败，未保存：' + e.message };
+        }
         atomicWriteSync(file, JSON.stringify(doc, null, 2));
+        rememberProjectWrite(name, file);
         return { ok: true, revision: doc.revision };
       });
     } catch (e) {
@@ -261,10 +284,10 @@ async function handleApi(req, res, url) {
       return send(res, 500, { ok: false, error: result.message });
     }
     if (result.invalid) {
-      return send(res, 422, { ok: false, error: '文档校验未通过，未保存', errors: result.errors });
+      return send(res, 422, { ok: false, code: result.errors[0]?.code, error: result.errors[0]?.message || '文档校验未通过，未保存', errors: result.errors });
     }
-    broadcast({ type: 'changed', name, revision: result.revision });
-    return send(res, 200, { ok: true, revision: result.revision, v1Backup: resultBackup || undefined });
+    broadcast({ type: 'changed', name, revision: result.revision, sourceClient: typeof body.clientId === 'string' ? body.clientId : null, sourceSession: Number.isInteger(body.sessionId) ? body.sessionId : null });
+    return send(res, 200, { ok: true, revision: result.revision, v1Backup: resultBackup || undefined, versionBackup: versionBackup || undefined });
   }
 
   if (p === '/api/external-change' && req.method === 'POST') { // CLI 直写文件后通知编辑器
@@ -351,6 +374,7 @@ const server = http.createServer(async (req, res) => {
 
     let p = decodeURIComponent(url.pathname);
     if (p === '/' || p === '/index.html') return serveStatic(res, path.join(APP_DIR, 'index.html'));
+    if (p === '/canvasloom.ico' || p === '/favicon.ico') return serveStatic(res, path.join(ROOT, 'canvasloom.ico'));
 
     const under = [['/app/', APP_DIR], ['/shared/', SHARED_DIR], ['/vendor/', VENDOR_DIR]];
     for (const [prefix, dir] of under) {
@@ -388,7 +412,7 @@ server.listen(PORT, '127.0.0.1', () => {
 // ---------- 项目文件轮询：感知 agent/CLI 的直接文件修改 ----------
 const WATCH_INTERVAL = 1500;
 async function startProjectWatcher() {
-  const mtimes = new Map(); // name -> mtimeMs
+  const mtimes = projectMtimes; // API 自己的写入已记录，不重复当成外部修改。
   setInterval(async () => {
     let files = [];
     try { files = await fs.readdir(PROJECTS_DIR); } catch { return; }
@@ -403,6 +427,7 @@ async function startProjectWatcher() {
         if (prev !== undefined && prev !== st.mtimeMs) {
           let revision = null;
           try { revision = JSON.parse(await fs.readFile(path.join(PROJECTS_DIR, f), 'utf8')).revision ?? null; } catch { /* 忽略 */ }
+          if (mtimes.get(name) !== prev) continue; // 异步读取期间 API 已完成新写入。
           broadcast({ type: 'changed', name, revision, source: 'external' });
         }
         mtimes.set(name, st.mtimeMs);

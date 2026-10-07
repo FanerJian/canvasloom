@@ -56,7 +56,7 @@ test('S2 dashboard 模板：顶栏 + 主体（侧栏/主内容）嵌套结构', 
   applyTemplate(doc, 'dashboard');
   const root = doc.components.root;
   assert.equal(root.layout.mode, 'vertical');
-  assert.deepEqual(root.children, ['body', 'topnav']);
+  assert.deepEqual(root.children, ['topnav', 'body']);
   const body = doc.components.body;
   assert.equal(body.layout.mode, 'horizontal');
   assert.deepEqual(body.children, ['sidebar', 'content']);

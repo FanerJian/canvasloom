@@ -1,3 +1,4 @@
+import { isPresentationDoc } from '../shared/protocol.js';
 // ============================================================
 // M5 功能风格面板 + 变体向导（v3 文档专属，UI 遵循路线图 §7 简洁原则）
 // 左栏第三个标签页：变体一览 / 功能（features）/ 风格（styles）/ 呈现（presentations）。
@@ -38,7 +39,7 @@ export function renderFeaturesPanel() {
   const host = document.getElementById('fs-panel');
   if (!host) return;
   host.textContent = '';
-  if (!state.doc || state.doc.version !== 3) {
+  if (!state.doc || !isPresentationDoc(state.doc)) {
     host.appendChild(el('div', 'p-hint',
       state.doc ? '功能、风格与方案为 v3 能力，当前文档为 v2。'
         : '请先打开或新建项目。'));
@@ -334,7 +335,7 @@ function activeVariantPresentationId(doc) {
 // 一次 mutate 完成创建+激活，Ctrl+Z 一步撤销。
 export function openVariantWizard() {
   const doc = state.doc;
-  if (!doc || doc.version !== 3) return;
+  if (!doc || !isPresentationDoc(doc)) return;
   const presIds = Object.keys(doc.presentations || {});
   const styleIds = Object.keys(doc.styles || {});
   if (!presIds.length || !styleIds.length) {

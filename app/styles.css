@@ -152,7 +152,7 @@ body.hide-left #left { margin-left: calc(var(--left-w) * -1); }
 body.hide-right #right { margin-right: calc(var(--right-w) * -1); }
 #btn-left-toggle.active, #btn-right-toggle.active { color: var(--accent); background: var(--accent-soft); }
 
-.side-sec { padding: 12px 12px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.side-sec { padding: 12px 12px 8px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; flex: none; }
 .side-sec.grow { flex: 1; overflow: hidden; border-bottom: none; }
 .side-sec h3 {
   margin: 0 0 9px; font-size: 11px; color: var(--text-3);
@@ -161,10 +161,10 @@ body.hide-right #right { margin-right: calc(var(--right-w) * -1); }
 .side-hint { font-size: 11px; color: var(--text-3); margin-top: 8px; line-height: 1.5; }
 
 /* ---------- 组件库 ---------- */
-#pal-list { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+#pal-list, #pal-regions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; }
 .pal-item {
   display: flex; align-items: center; gap: 7px;
-  padding: 8px 9px; border: 1px solid var(--border); border-radius: var(--radius-m);
+  min-width: 0; padding: 8px 9px; border: 1px solid var(--border); border-radius: var(--radius-m);
   background: var(--surface); cursor: pointer; text-align: left; color: var(--text-2);
   transition: border-color .16s var(--ease), background .16s var(--ease),
               transform .16s var(--ease), box-shadow .16s var(--ease), color .16s var(--ease);
@@ -234,10 +234,9 @@ body.hide-right #right { margin-right: calc(var(--right-w) * -1); }
 .uiw-canvas-node.uiw-container { box-shadow: 0 0 0 1px rgba(37, 99, 235, .08); }
 .uiw-canvas-node.uiw-empty { min-width: 28px; min-height: 28px; }
 .uiw-canvas-node.uiw-empty::after {
-  content: '空容器'; position: absolute; inset: 0;
+  content: attr(data-region-label); position: absolute; inset: 0;
   display: flex; align-items: center; justify-content: center;
-  color: #b3bac4; font-size: 11px;
-  background-image: repeating-linear-gradient(45deg, transparent 0 6px, rgba(0,0,0,.03) 6px 12px);
+  color: #8b96a5; font-size: 13px; pointer-events: none;
 }
 .uiw-canvas-node.uiw-input { background: #ffffff; }
 
@@ -567,6 +566,8 @@ input[type="color"].p-input { padding: 2px 3px; height: 29px; flex: none; width:
 .mode-grid {
   display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
 }
+.template-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.layout-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .mode-card {
   display: flex; flex-direction: column; align-items: center; gap: 4px;
   padding: 12px 8px 10px; border: 1.5px solid var(--border); border-radius: var(--radius-m);
@@ -685,6 +686,25 @@ input[type="color"].p-input { padding: 2px 3px; height: 29px; flex: none; width:
 .left-page { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 #left-page-add { overflow-y: auto; }
 #left-page-tree { overflow: hidden; }
+
+/* 项目名与方案名让出空间，常用操作在常见窗口宽度内始终可见。 */
+.proj { flex: 0 1 290px; }
+.proj-name { min-width: 0; }
+.proj-mode, .proj-status { flex: none; }
+#variant-label, #page-label { max-width: 78px; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1440px) {
+  .tb-sub { display: none; }
+  #topbar, .tb-right { gap: 6px; }
+  .tb-sep { margin: 0 2px; }
+  .proj-name { max-width: 110px; }
+}
+@media (max-width: 1280px) {
+  #topbar { padding: 0 8px; gap: 4px; }
+  .tb-btn { padding: 0 7px; }
+  .proj-mode { display: none; }
+  .proj-name { max-width: 85px; }
+  #variant-label, #page-label { max-width: 52px; }
+}
 
 /* ---------- 空状态引导卡 ---------- */
 #empty-state {

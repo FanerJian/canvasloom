@@ -1,3 +1,4 @@
+import { isPresentationDoc } from '../shared/protocol.js';
 // ============================================================
 // 面板：左侧（组件库 + 层级树）、右侧（属性面板）、模态框、提示
 // 属性面板中文标签与 shared/protocol.js 的字段定义同源。
@@ -17,6 +18,7 @@ import { designRectById, positionPreservingVisual, parentContentOriginById } fro
 import { ALIGN_MODES, ALIGN_LABELS, planAlign, planDistribute, sharedParent } from './align.js';
 import { remapComponentRefs, cleanupDeletedRefs } from './v3edit.js';
 import { collectCopySnapshot, pasteSnapshotIntoDoc, duplicateSubtree, adaptChildToTargetLayout } from '../shared/clipboard.js';
+import { intentSection } from './intent-ui.js';
 
 const svgWrap = (inner) => `<svg viewBox="0 0 24 24">${inner}</svg>`;
 const TYPE_ICONS = {
@@ -319,10 +321,11 @@ export function renderProperties() {
     return;
   }
   if (!comp) {
+    root.appendChild(intentSection(null, { openModal, closeModal, toast }));
     root.appendChild(canvasSection());
     const empty = document.createElement('div');
     empty.className = 'props-empty';
-    empty.innerHTML = '未选中组件<br><small>点击画布或层级树中的组件查看属性；<br>点击画布空白处可编辑画布设置</small>';
+    empty.textContent = '未选中组件';
     root.appendChild(empty);
     return;
   }
@@ -333,6 +336,7 @@ export function renderProperties() {
   sec1.appendChild(rowText('标识 ID', comp.id, (v) => renameComponent(comp.id, v), 'code'));
   sec1.appendChild(rowArea('用途说明', comp.purpose || '', (v) => patch(comp.id, { purpose: v }, `修改 ${comp.id} 的用途说明`, 'purpose')));
   root.appendChild(sec1);
+  root.appendChild(intentSection(comp, { openModal, closeModal, toast }));
 
   const secPos = section('位置与尺寸');
   if (comp.parent) {
@@ -407,7 +411,7 @@ export function renderProperties() {
   root.appendChild(secF);
 
   // v3 组件扩展：功能绑定与交互（编辑器内存直改 presentation 原树；v2 文档不显示）
-  if (state.doc && state.doc.version === 3) root.appendChild(v3BindingSection(comp));
+  if (state.doc && isPresentationDoc(state.doc)) root.appendChild(v3BindingSection(comp));
 
   if (comp.id !== 'root') {
     const secD = section('危险操作', false);
@@ -421,7 +425,7 @@ export function renderProperties() {
 // 活动变体对指定组件的样式补丁（无则 null）——用于面板遮蔽提示
 function v3OverridePatchFor(compId) {
   const doc = state.doc;
-  if (!doc || doc.version !== 3) return null;
+  if (!doc || !isPresentationDoc(doc)) return null;
   const v = (Array.isArray(doc.variants) ? doc.variants : []).find((x) => x && x.id === doc.activeVariant);
   const patches = v && v.overrides && v.overrides.components;
   return (patches && patches[compId]) || null;
@@ -697,7 +701,7 @@ function renameComponent(id, v) {
       if (other.parent === id) other.parent = nid;
     }
     // v3：联动重映射 actions.target 与指向该 presentation 的变体补丁键
-    if (doc.version === 3) remapComponentRefs(doc, doc.__presentationId, { [id]: nid });
+    if (isPresentationDoc(doc)) remapComponentRefs(doc, doc.__presentationId, { [id]: nid });
     if (state.selection === id) state.selection = nid;
   });
 }
@@ -833,7 +837,7 @@ export function deleteComponents(ids) {
       delete doc.components[cid];
     };
     for (const id of list) rm(id);
-    if (doc.version === 3) cleanupDeletedRefs(doc, doc.__presentationId, removed);
+    if (isPresentationDoc(doc)) cleanupDeletedRefs(doc, doc.__presentationId, removed);
   });
   toast('已删除 ' + list.length + ' 个组件');
   resyncSelection();
@@ -856,7 +860,7 @@ export function deleteComponent(id) {
     };
     rm(id);
     // v3：清理指向被删组件的点击动作与变体补丁键，保持文档可保存
-    if (doc.version === 3) cleanupDeletedRefs(doc, doc.__presentationId, removed);
+    if (isPresentationDoc(doc)) cleanupDeletedRefs(doc, doc.__presentationId, removed);
   });
   toast(`已删除「${label}」`);
   resyncSelection(); // 多选时清理失效选中（S2b）

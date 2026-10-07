@@ -90,10 +90,10 @@ export function applyTemplate(doc, templateId) {
     const body = region('body', '主体', '侧栏与主内容的横向容器', { width: fill, height: fill }, rowLayout(0, 0), '#ffffff');
     const sidebar = region('sidebar', '侧栏', '导航菜单区：放主要栏目入口', { width: fixed(220), height: fill }, colLayout(12, 8), '#f1f5f9');
     const content = region('content', '主内容', '仪表盘分区：放统计卡、图表与列表', { width: fill, height: fill }, colLayout(16, 10), '#ffffff');
+    put(doc, topnav, 'root');
     const bodyId = put(doc, body, 'root');
     put(doc, sidebar, bodyId);
     put(doc, content, bodyId);
-    put(doc, topnav, 'root');
   }
   return doc;
 }

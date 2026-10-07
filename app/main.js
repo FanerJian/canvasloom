@@ -1,3 +1,4 @@
+import { isPresentationDoc } from '../shared/protocol.js';
 // ============================================================
 // 编辑器入口：装配、工具栏、快捷键、保存与外部修改协同
 // ============================================================
@@ -10,7 +11,7 @@ import { initCanvas, renderCanvas, refreshOverlay, fitZoom, nudge } from './canv
 import { renderPalette, renderBlocks, renderTree, renderProperties, renderToolbarState, openModal, closeModal, toast, copySelection, pasteClipboard, deleteComponent, deleteComponents, duplicateComponent } from './panels.js';
 import { renderFeaturesPanel, openVariantWizard, switchVariant } from './v3panels.js';
 import { initPreviewBar, renderPreviewPane, runCheck, runExport } from './preview.js';
-import { listProjects, getProject, createProject, saveProject, connectEvents } from './api.js';
+import { listProjects, getProject, createProject, saveProject, connectEvents, EDITOR_CLIENT_ID } from './api.js';
 import { closeContextMenu } from './ctxmenu.js';
 import { upgradeDoc, upgradeDocToV3, CompatError } from '../shared/compat.js';
 
@@ -237,7 +238,7 @@ async function showNewDialog() {
   tplLabel.textContent = '起步模板';
   box.appendChild(tplLabel);
   const tplGrid = document.createElement('div');
-  tplGrid.className = 'mode-grid';
+  tplGrid.className = 'mode-grid template-grid';
   for (const [id, t] of Object.entries(TEMPLATES)) {
     const card = document.createElement('button');
     card.type = 'button';
@@ -256,7 +257,7 @@ async function showNewDialog() {
   layoutLabel.textContent = '起步方式';
   box.appendChild(layoutLabel);
   const layoutRow = document.createElement('div');
-  layoutRow.className = 'mode-grid';
+  layoutRow.className = 'mode-grid layout-grid';
   const LAYOUT_CHOICES = [
     ['free', '✥ 自由摆放', '按坐标自由摆放（推荐）'],
     ['vertical', '⬓ 自动排列', '按顺序自动排列'],
@@ -311,7 +312,7 @@ async function save({ force } = {}) {
   state.saving = true;
   renderToolbarState();
   try {
-    const session = { name: state.name, doc: state.doc, seq: state.editSeq };
+    const session = { name: state.name, doc: state.doc, seq: state.editSeq, id: state.sessionId };
     const report = validateDoc(session.doc);
     if (!report.ok) {
       const box = document.createElement('div');
@@ -326,15 +327,18 @@ async function save({ force } = {}) {
       return;
     }
     const base = force ? (state._serverRevision ?? state.revision) : state.revision;
-    const r = await saveProject(state.name, session.doc, base);
+    const r = await saveProject(state.name, session.doc, base, session.id);
+    if (state.sessionId !== session.id || state.name !== session.name) return;
     if (r.ok) {
+      if (state.revision > r.revision) return;
       state.revision = r.revision;
       state._serverRevision = r.revision;
+      state.doc.revision = r.revision;
       const sameSession = state.name === session.name && state.doc === session.doc && state.editSeq === session.seq;
       if (sameSession) {
         state.dirty = false;
         clearDraft();
-        toast('已保存', 'ok');
+        toast(r.versionBackup ? '已保存；升级前版本已备份' : '已保存', 'ok');
       } else {
         // 保存期间又有修改（或已切走）：磁盘内容是新修订号，但画布仍是未保存状态
         scheduleDraftSave();
@@ -367,9 +371,13 @@ async function save({ force } = {}) {
 function connect() {
   connectEvents(async (msg) => {
     if (msg.type === 'changed' && msg.name === state.name) {
-      const r = await getProject(state.name);
-      if (!r.ok) return;
+      if (msg.sourceClient === EDITOR_CLIENT_ID && msg.sourceSession === state.sessionId) return;
+      const session = { name: state.name, id: state.sessionId };
+      const r = await getProject(session.name);
+      if (!r.ok || state.name !== session.name || state.sessionId !== session.id) return;
+      if (r.doc.revision <= state.revision || (state.lastExternal?.revision || 0) >= r.doc.revision) return;
       if (state.dirty) {
+        state.lastExternal = { revision: r.doc.revision };
         const box = document.createElement('div');
         box.innerHTML = `<div class="p-hint">项目已被外部修改（修订号 ${r.doc.revision}），当前存在未保存修改。<br><br>「加载最新」将载入外部版本，当前内容转为撤销记录。</div>`;
         openModal('外部修改', box, [
@@ -377,6 +385,7 @@ function connect() {
           ['加载最新', async () => { closeModal(); await reloadLatestFromDisk(); }],
         ]);
       } else {
+        state.lastExternal = null;
         adoptExternal(adoptDocForSession(r.doc));
         toast('项目已被外部修改，已自动刷新，可撤销', 'info');
       }
@@ -471,7 +480,7 @@ function renderVariantMenu() {
   const wrap = $('variant-wrap'), btn = $('btn-variant'), menu = $('variant-menu'), label = $('variant-label');
   if (!wrap || !btn || !menu || !label) return;
   const doc = state.doc;
-  const variants = doc && doc.version === 3 && Array.isArray(doc.variants) ? doc.variants.filter(Boolean) : [];
+  const variants = doc && isPresentationDoc(doc) && Array.isArray(doc.variants) ? doc.variants.filter(Boolean) : [];
   const isV3 = variants.length > 0;
   wrap.classList.toggle('hidden', !isV3);
   if (!isV3) { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); return; }
@@ -503,10 +512,10 @@ function renderPageMenu() {
   const wrap = $('page-wrap'), btn = $('btn-page'), menu = $('page-menu'), label = $('page-label');
   if (!wrap || !btn || !menu || !label) return;
   const doc = state.doc;
-  const isV3 = !!doc && doc.version === 3;
-  wrap.classList.toggle('hidden', !isV3);
-  if (!isV3) { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); return; }
+  const isV3 = !!doc && isPresentationDoc(doc);
   const pages = pagesOfDoc();
+  wrap.classList.toggle('hidden', !isV3 || pages.length === 0);
+  if (!isV3 || !pages.length) { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); return; }
   const view = viewDoc();
   const nameOf = (pid) => {
     const c = view ? view.components[pid] : null;
@@ -548,11 +557,12 @@ function renderPageMenu() {
 function renderUpgradeEntry() {
   const btn = $('btn-upgrade-v3');
   if (!btn) return;
-  btn.classList.toggle('hidden', !(state.doc && state.doc.version !== 3));
+  btn.classList.toggle('hidden', !(state.doc && !isPresentationDoc(state.doc)));
+  $('btn-add-page').classList.toggle('hidden', !(state.doc && isPresentationDoc(state.doc)));
 }
 
 function showUpgradeDialog() {
-  if (!state.doc || state.doc.version === 3) return;
+  if (!state.doc || isPresentationDoc(state.doc)) return;
   const box = document.createElement('div');
   box.className = 'p-hint';
   box.innerHTML = '升级后将启用<strong>页面图层</strong>与<strong>点击动作</strong>；原设计内容保留为默认呈现，可撤销。';
@@ -700,6 +710,10 @@ function initToolbar() {
   $('btn-export').addEventListener('click', runExport);
   const upBtn = $('btn-upgrade-v3');
   if (upBtn) upBtn.addEventListener('click', () => { closeMenus(); showUpgradeDialog(); });
+  $('btn-add-page').addEventListener('click', () => {
+    closeMenus();
+    if (addPage(`页面 ${pagesOfDoc().length + 1}`)) toast('已新建页面', 'ok');
+  });
   initMenus();
   initLeftTabs();
   initEmptyState();
