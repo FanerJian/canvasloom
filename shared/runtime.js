@@ -1,29 +1,38 @@
 // ============================================================
-// CanvasLoom M3 交互运行时 —— 浏览器侧点击交互（toggle/open/close、Esc、遮罩、焦点回归）
+// CanvasLoom 交互运行时 —— 浏览器侧点击交互（toggle/open/close/goto、Esc、遮罩、焦点回归）
 // 职责边界：
 //   · 只操作 DOM（inline display / z-index / 焦点 / 事件监听），绝不修改传入的
 //     doc/spec 对象——运行态只存在于内存与 DOM，任何情况下不得写回设计文件；
 //   · 点击事件委托挂在 rootEl 上，按渲染器输出的 [data-id] 属性匹配动作；
-//   · 可见性状态由内部 Set 维护（初始可见 = 渲染结果 - initiallyClosed 集合）。
+//   · 可见性状态由内部 Set 维护（初始可见 = 渲染结果 - initiallyClosed 集合
+//     - 非起始页面集合；页面互斥显示，goto 切页时同时收起已打开面板）。
 // 浏览器与 Node 通用：extractInteractionSpec 是纯函数；initInteractions 只在
 // 有 DOM 的环境调用（单测用假 DOM 驱动）。
 // ============================================================
 
 // ---------- 纯函数：从 v3 文档提取交互 spec（只读 doc，返回全新对象） ----------
-// spec = { initiallyClosed: [组件id…], actions: { [按钮id]: { click: { type, target } } } }
+// spec = { initiallyClosed: [组件id…], actions: { [按钮id]: { click: { type, target } } }, pages: [页面id…] }
 // · initiallyClosed：指定变体指向 presentation 的组件树中所有 initiallyOpen===false 的容器；
 //   变体 overrides 只微调 style、不动 actions/initiallyOpen，直接读 presentation 即可；
-// · actions：所有带 actions.click 的按钮（校验层保证 target 是同树 initiallyOpen:false 的容器）；
+// · actions：所有带 actions.click 的按钮（校验层保证面板动作目标 initiallyOpen:false、goto 目标 page:true）；
+// · pages：root 直接子元素中 page===true 的页面容器，按 children 顺序；首个 = 起始页（v3.1）；
 // · 变体/presentation 缺失时返回空 spec（渲染层会先行报错，这里保持宽容不抛异常）。
 export function extractInteractionSpec(doc, variantId) {
-  const empty = { initiallyClosed: [], actions: {} };
+  const empty = { initiallyClosed: [], actions: {}, pages: [] };
   if (!doc || typeof doc !== 'object' || !Array.isArray(doc.variants) || doc.presentations == null
     || typeof doc.presentations !== 'object') return empty;
   const variant = doc.variants.find((v) => v && typeof v === 'object' && v.id === variantId);
   const pres = variant ? doc.presentations[variant.presentation] : null;
   const comps = pres && typeof pres === 'object' ? pres.components : null;
   if (!comps || typeof comps !== 'object') return empty;
-  const spec = { initiallyClosed: [], actions: {} };
+  const spec = { initiallyClosed: [], actions: {}, pages: [] };
+  const rootComp = comps.root;
+  if (rootComp && typeof rootComp === 'object' && Array.isArray(rootComp.children)) {
+    for (const id of rootComp.children) {
+      const c = comps[id];
+      if (c && typeof c === 'object' && c.type === 'container' && c.page === true) spec.pages.push(id);
+    }
+  }
   for (const id of Object.keys(comps)) {
     const c = comps[id];
     if (!c || typeof c !== 'object') continue;
@@ -37,7 +46,7 @@ export function extractInteractionSpec(doc, variantId) {
 }
 
 // ---------- 交互运行时 ----------
-// initInteractions({ rootEl, spec }) → { isOpen(id), closeAll(), destroy() }
+// initInteractions({ rootEl, spec }) → { isOpen(id), closeAll(), gotoPage(id), currentPage(), destroy() }
 // rootEl：已渲染组件树的容器（#artboard 或预览根）；spec 见 extractInteractionSpec。
 export function initInteractions({ rootEl, spec } = {}) {
   if (!rootEl || typeof rootEl.querySelector !== 'function') {
@@ -48,13 +57,16 @@ export function initInteractions({ rootEl, spec } = {}) {
     ? s.initiallyClosed.filter((x) => typeof x === 'string')
     : [];
   const actions = s.actions && typeof s.actions === 'object' ? s.actions : {};
+  // 页面图层（v3.1）：互斥显示，初始只显示第一个（起始页）
+  const pageIds = Array.isArray(s.pages) ? s.pages.filter((x) => typeof x === 'string') : [];
   const ownerDoc = rootEl.ownerDocument || (typeof document !== 'undefined' ? document : null);
 
-  const closed = new Set(expandableIds); // 当前处于隐藏状态的可展开面板 id
+  const closed = new Set(expandableIds); // 当前处于隐藏状态的可展开面板/非当前页面 id
   const hidden = new Map();              // 元素 → 隐藏前原始 inline display（恢复用）
   const raised = new Map();              // 元素 → 抬升前原始 inline zIndex（恢复用）
   let lastTrigger = null;                // 最近一次触发动作的按钮（Esc 焦点回归用）
   let overlay = null;                    // 点击捕获遮罩（任一可展开面板可见时挂载）
+  let currentPage = pageIds.length ? pageIds[0] : null;
   let destroyed = false;
 
   function elOf(id) {
@@ -114,6 +126,25 @@ export function initInteractions({ rootEl, spec } = {}) {
     return changed;
   }
 
+  // 页面切换（v3.1 goto）：显示目标页面、隐藏其余页面，并收起已打开的面板（导航语义）。
+  // 页面不在 expandableIds 里，遮罩逻辑不受影响；目标就是当前页时仅收起面板。
+  function gotoPage(id) {
+    if (!pageIds.includes(id)) return false;
+    closeAll();
+    for (const pid of pageIds) {
+      const el = elOf(pid);
+      if (!el) continue;
+      if (pid === id) {
+        if (closed.has(pid)) { closed.delete(pid); showEl(el); }
+      } else if (!closed.has(pid)) {
+        closed.add(pid);
+        hideEl(el);
+      }
+    }
+    currentPage = id;
+    return true;
+  }
+
   // 遮罩：全视口纯透明点击捕获层（z=1，低于面板高于其余内容，不加深色），
   // 挂在 rootEl 内，点击它 = 关闭全部打开的可展开面板（等价点外部）
   function syncOverlay() {
@@ -170,6 +201,8 @@ export function initInteractions({ rootEl, spec } = {}) {
       openPanel(act.target);
     } else if (act.type === 'close') {
       closePanel(act.target);
+    } else if (act.type === 'goto') {
+      gotoPage(act.target);
     }
     // 未知类型忽略（校验层已拒绝非法动作，运行时保持宽容）
     lastTrigger = triggerEl || lastTrigger;
@@ -185,10 +218,15 @@ export function initInteractions({ rootEl, spec } = {}) {
     focusTrigger(lastTrigger);
   }
 
-  // 初始化：把 initiallyClosed 集合的元素置为隐藏（记录原 display 以便恢复）
+  // 初始化：把 initiallyClosed 集合的元素置为隐藏（记录原 display 以便恢复）；
+  // 页面图层把起始页之外的全部隐藏（goto 切换， destroy 时一并恢复）
   for (const id of expandableIds) {
     const el = elOf(id);
     if (el) { closed.add(id); hideEl(el); }
+  }
+  for (let i = 1; i < pageIds.length; i++) {
+    const el = elOf(pageIds[i]);
+    if (el) { closed.add(pageIds[i]); hideEl(el); }
   }
   if (rootEl.addEventListener) rootEl.addEventListener('click', onRootClick);
   if (ownerDoc && ownerDoc.addEventListener) ownerDoc.addEventListener('keydown', onKeyDown);
@@ -196,6 +234,8 @@ export function initInteractions({ rootEl, spec } = {}) {
   return {
     isOpen,
     closeAll,
+    gotoPage,
+    currentPage: () => currentPage,
     destroy() {
       destroyed = true;
       if (rootEl.removeEventListener) rootEl.removeEventListener('click', onRootClick);

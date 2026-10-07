@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>界面工坊 CanvasLoom</title>
-<link rel="stylesheet" href="/app/styles.css?v=8">
+<link rel="stylesheet" href="/app/styles.css?v=9">
 </head>
 <body>
 <header id="topbar">
@@ -29,6 +29,14 @@
       <svg class="tb-caret" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg>
     </button>
     <div id="variant-menu" class="tb-menu hidden"></div>
+  </div>
+
+  <div class="tb-menu-wrap hidden" id="page-wrap">
+    <button id="btn-page" class="tb-btn" title="页面图层：切换正在编辑的页面，或新建页面（v3 文档）" aria-haspopup="true" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M4 9h16" opacity=".45"/></svg>页面：<span id="page-label"></span>
+      <svg class="tb-caret" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg>
+    </button>
+    <div id="page-menu" class="tb-menu hidden"></div>
   </div>
 
   <div class="tb-sep"></div>
@@ -74,6 +82,9 @@
       <div class="tb-menu-sep"></div>
       <button id="btn-check" class="tb-btn" title="实测当前视口并检查布局">
         <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 5-5.5"/></svg>检查布局
+      </button>
+      <button id="btn-upgrade-v3" class="tb-btn hidden" title="把项目升级为 v3：启用页面图层与点击交互（原设计内容原样保留）">
+        <svg viewBox="0 0 24 24"><path d="M12 19V5"/><path d="M5 12l7-7 7 7"/></svg>升级为 v3（页面与交互）…
       </button>
     </div>
   </div>
@@ -206,6 +217,6 @@
 <div id="toast-root"></div>
 
 <script src="/vendor/html2canvas.min.js"></script>
-<script type="module" src="/app/main.js?v=8"></script>
+<script type="module" src="/app/main.js?v=9"></script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 // 缩放手柄改尺寸：fill 轴拖后转固定、percent 轴按新比例重算（网格父容器中调跨格数）。
 // 画布通过 transform:scale 缩放，所有指针位移按 1/zoom 换算为设计坐标。
 // ============================================================
-import { state, mutate, select, setZoom, setSnapEnabled, PALETTE_MIME, viewDoc } from './store.js';
+import { state, mutate, select, setZoom, setSnapEnabled, PALETTE_MIME, viewDoc, pagesOfDoc } from './store.js';
 import {
   findComponent, isContainer, normalizePadding, LIMITS, isAbsolutePlacement,
   COMPONENT_TYPES, defaultSizeFor, firstFreeGridCell, newComponent,
@@ -56,7 +56,19 @@ export function renderCanvas() {
   // 预览/导出的最终裁剪仍由设计规则（根容器 overflow 与视口）决定
   el.artboard.style.overflow = state.showOutsideCanvas ? 'visible' : 'hidden';
   renderDoc(el.artboard, doc, { viewport: { width: w, height: h }, canvasMode: true, showOverflow: state.showOutsideCanvas, editable: false });
+  applyPageVisibility();
   refreshOverlay();
+}
+
+// v3.1 页面图层：设计视图一次只显示一个页面（state.activePageId），其余页面 display:none——
+// 页面渲染为铺满画布的独立摆放容器，互相重叠，不隐藏会互相遮挡。
+// 每次画布重建后重新施加（渲染器输出的是全可见的新 DOM）；预览/导出的显隐由运行时按 goto 管理。
+function applyPageVisibility() {
+  for (const pid of pagesOfDoc()) {
+    if (pid === state.activePageId) continue;
+    const node = el.artboard.querySelector(`[data-id="${CSS.escape(pid)}"]`);
+    if (node) node.style.display = 'none';
+  }
 }
 
 // v3 文档解析失败的错误卡（与导出页 showRenderError 同语义）

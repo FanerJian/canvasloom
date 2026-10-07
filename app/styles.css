@@ -196,6 +196,11 @@ body.hide-right #right { margin-right: calc(var(--right-w) * -1); }
 .tree-ico { width: 15px; height: 15px; display: flex; align-items: center; justify-content: center; color: var(--text-3); flex: none; }
 .tree-row.active .tree-ico { color: var(--accent); }
 .tree-name { overflow: hidden; text-overflow: ellipsis; }
+.tree-page-badge {
+  font-style: normal; font-size: 10px; line-height: 1; flex: none;
+  padding: 2px 6px; border-radius: 999px;
+  background: var(--accent-soft); color: var(--accent-strong);
+}
 .tree-id {
   color: var(--text-3); font-size: 10px; font-family: Consolas, monospace;
   opacity: 0; transition: opacity .15s var(--ease);
@@ -621,6 +626,7 @@ input[type="color"].p-input { padding: 2px 3px; height: 29px; flex: none; width:
 }
 .tb-menu .tb-btn:hover:not(:disabled) { background: var(--surface-2); }
 .tb-menu-sep { height: 1px; background: var(--border); margin: 4px 6px; flex: none; }
+.tb-menu-hint { padding: 6px 10px 8px; max-width: 260px; white-space: normal; }
 .tb-btn .tb-caret { width: 11px; height: 11px; margin-left: 1px; transition: transform .16s var(--ease); }
 .tb-menu-wrap.open .tb-caret { transform: rotate(180deg); }
 .tb-menu-wrap.open #btn-more { background: var(--surface-2); color: var(--text); }

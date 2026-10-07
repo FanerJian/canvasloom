@@ -1,7 +1,7 @@
 // ============================================================
 // 预览与检查：真实视口预览、布局快照实测、检查报告、导出包
 // ============================================================
-import { state, select, setMode, setPreviewViewport, viewDoc } from './store.js';
+import { state, select, setMode, setPreviewViewport, viewDoc, pagesOfDoc } from './store.js';
 import { renderDoc } from '../shared/renderer.js';
 import { validateDoc } from '../shared/validate.js';
 import { checkSnapshot } from '../shared/measure.js';
@@ -133,7 +133,7 @@ export async function runCheck() {
   toast('正在实测布局……');
   const snapshot = await measureHidden(renderBase, vp);
   const staticReport = validateDoc(doc); // 结构检查恒对原文档（v3 覆盖全部 presentation）
-  const measureReport = checkSnapshot(renderBase, snapshot);
+  const measureReport = checkSnapshot(renderBase, snapshot, { pageIds: pagesOfDoc() });
   state.lastCheck = { snapshot, staticReport, measureReport, viewport: vp };
   window.__lastCheck = state.lastCheck; // 调试/自动化检查出口
   showReport();
@@ -208,7 +208,7 @@ export async function runExport() {
       if (wantSnap || wantShot) snapshot = await measureHidden(view, vp);
       if (wantSnap) {
         const staticReport = validateDoc(doc);
-        const mReport = checkSnapshot(view, snapshot);
+        const mReport = checkSnapshot(view, snapshot, { pageIds: pagesOfDoc() });
         report = { static: staticReport, measure: mReport,
           errors: [...staticReport.errors, ...mReport.errors], warnings: [...staticReport.warnings, ...mReport.warnings] };
       }

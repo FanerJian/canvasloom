@@ -2,7 +2,7 @@
 // 面板：左侧（组件库 + 层级树）、右侧（属性面板）、模态框、提示
 // 属性面板中文标签与 shared/protocol.js 的字段定义同源。
 // ============================================================
-import { state, mutate, select, history, selectedComp, PALETTE_MIME, viewDoc, scopeOf } from './store.js';
+import { state, mutate, select, history, selectedComp, PALETTE_MIME, viewDoc, scopeOf, pagesOfDoc } from './store.js';
 import {
   COMPONENT_TYPES, TYPE_IDS, LAYOUT_MODES, SIZE_MODES, LIMITS,
   JUSTIFY_OPTIONS, ALIGN_OPTIONS, STYLE_FIELDS, ID_PATTERN,
@@ -155,10 +155,11 @@ export function renderTree() {
     tree.appendChild(hint);
     return;
   }
-  tree.appendChild(treeNode(view.components.root, 0));
+  const pageSet = new Set(pagesOfDoc()); // 页面图层徽标（v3.1）
+  tree.appendChild(treeNode(view.components.root, 0, pageSet));
 }
 
-function treeNode(comp, depth) {
+function treeNode(comp, depth, pageSet) {
   const row = document.createElement('div');
   row.className = 'tree-row' + (comp.id === state.selection ? ' active' : '');
   row.dataset.id = comp.id;
@@ -169,7 +170,9 @@ function treeNode(comp, depth) {
   const caret = hasChildren ? (collapsed ? '▸' : '▾') : (isContainer(comp) ? '▸' : '');
   const caretCls = hasChildren ? 'tree-caret tog' : (isContainer(comp) ? 'tree-caret empty' : 'tree-caret');
   row.innerHTML = `<span class="${caretCls}">${caret}</span><span class="tree-ico">${TYPE_ICONS[comp.type] || '▪'}</span>` +
-    `<span class="tree-name">${escapeHtml(comp.name || comp.id)}</span><span class="tree-id">${escapeHtml(comp.id)}</span>`;
+    `<span class="tree-name">${escapeHtml(comp.name || comp.id)}</span>` +
+    (pageSet && pageSet.has(comp.id) ? '<em class="tree-page-badge" title="页面图层：铺满画布，可被 goto 动作切换显示">页面</em>' : '') +
+    `<span class="tree-id">${escapeHtml(comp.id)}</span>`;
   if (hasChildren) {
     const caretEl = row.querySelector('.tree-caret');
     caretEl.title = collapsed ? '展开子组件' : '折叠子组件';
@@ -217,7 +220,7 @@ function treeNode(comp, depth) {
   if (hasChildren && !collapsed) {
     for (const cid of comp.children || []) {
       const child = findComponent(viewDoc(), cid);
-      if (child) frag.appendChild(treeNode(child, depth + 1));
+      if (child) frag.appendChild(treeNode(child, depth + 1, pageSet));
     }
   }
   return frag;
@@ -1053,23 +1056,40 @@ function v3BindingSection(comp) {
 
   if (comp.type === 'button') {
     const act = oc.actions && oc.actions.click ? oc.actions.click : null;
-    const typeOpts = [['', '（无动作）'], ...V3_ACTION_TYPES.map((t) => [t, { toggle: 'toggle 开/关面板', open: 'open 打开面板', close: 'close 关闭面板' }[t]])];
+    const typeOpts = [['', '（无动作）'], ...V3_ACTION_TYPES.map((t) => [t, { toggle: 'toggle 开/关面板', open: 'open 打开面板', close: 'close 关闭面板', goto: 'goto 跳转页面' }[t]])];
     sec.appendChild(rowSelect('点击动作（click）', typeOpts, act ? act.type : '', (v) => setActionType(comp.id, v)));
     if (act && act.type) {
-      const targets = actionTargets();
+      const isGoto = act.type === 'goto';
+      const targets = isGoto ? pageTargets() : actionTargets();
       if (!targets.length) {
         const hint = document.createElement('div');
         hint.className = 'p-hint';
-        hint.textContent = '本呈现方案还没有「初始收起」的容器：先把某个容器的初始展开关掉，再回来选目标。';
+        hint.textContent = isGoto
+          ? '还没有页面图层：用顶栏「页面」菜单新建页面，再回来选跳转目标。'
+          : '本呈现方案还没有「初始收起」的容器：先把某个容器的初始展开关掉，再回来选目标。';
         sec.appendChild(hint);
       } else {
-        sec.appendChild(rowSelect('动作目标面板', targets, act.target || '', (v) => setActionTarget(comp.id, v)));
+        sec.appendChild(rowSelect(isGoto ? '跳转目标页面' : '动作目标面板', targets, act.target || '', (v) => setActionTarget(comp.id, v)));
       }
     }
   }
 
   if (comp.type === 'container') {
-    sec.appendChild(rowCheck('初始展开（关闭后可作为点击动作的目标面板）', oc.initiallyOpen !== false, (v) => setInitiallyOpen(comp.id, v)));
+    if (oc.page === true) {
+      // 页面图层：显隐由页面切换管理，不提供「初始展开」；给出起始页设置
+      const pages = pageTargets();
+      const isStart = pages.length > 0 && pages[0][0] === comp.id;
+      const phint = document.createElement('div');
+      phint.className = 'p-hint';
+      phint.textContent = '这是页面图层：铺满画布、被 goto 动作切换显示。' +
+        (isStart ? '当前是起始页（预览打开时最先显示）。' : '需要的话可把它设为起始页。');
+      sec.appendChild(phint);
+      if (!isStart) {
+        sec.appendChild(rowButtons('页面顺序', [['设为起始页', () => makeStartPage(comp.id), false]]));
+      }
+    } else {
+      sec.appendChild(rowCheck('初始展开（关闭后可作为点击动作的目标面板）', oc.initiallyOpen !== false, (v) => setInitiallyOpen(comp.id, v)));
+    }
   }
 
   const hint = document.createElement('div');
@@ -1079,14 +1099,38 @@ function v3BindingSection(comp) {
   return sec;
 }
 
-// 可作为动作目标的容器：本 presentation 内 initiallyOpen === false 的容器（冻结决策 5）
+// 可作为面板动作目标的容器：本 presentation 内 initiallyOpen === false 的普通容器
+// （冻结决策 5；页面容器 page:true 由 goto 管理，不作面板目标，v3.1）
 function actionTargets() {
   const scope = scopeOf(state.doc);
   const pres = scope.__presentationId && state.doc.presentations ? state.doc.presentations[scope.__presentationId] : null;
   const comps = pres && pres.components ? pres.components : {};
   return Object.values(comps)
-    .filter((c) => c && c.type === 'container' && c.initiallyOpen === false)
+    .filter((c) => c && c.type === 'container' && c.initiallyOpen === false && c.page !== true)
     .map((c) => [c.id, `${c.name || c.id}（${c.id}）`]);
+}
+
+// goto 的目标：本 presentation 内 page === true 的页面容器（按 root.children 顺序；首个为起始页）
+function pageTargets() {
+  const scope = scopeOf(state.doc);
+  const comps = (scope && scope.components) || {};
+  const root = comps.root;
+  const out = [];
+  for (const id of (root && root.children) || []) {
+    const c = comps[id];
+    if (c && c.type === 'container' && c.page === true) out.push([id, `${c.name || id}（${id}）`]);
+  }
+  return out;
+}
+
+// 把页面容器移到 root.children 首位（起始页 = 预览打开时最先显示的页面）
+function makeStartPage(id) {
+  mutate(`设「${id}」为起始页`, (doc) => {
+    const root = doc.components.root;
+    const arr = root && root.children;
+    const i = arr ? arr.indexOf(id) : -1;
+    if (i > 0) { arr.splice(i, 1); arr.unshift(id); }
+  });
 }
 
 function patchV3Field(id, key, value) {
@@ -1124,12 +1168,21 @@ function setActionType(id, type) {
     });
     return;
   }
-  const targets = actionTargets();
-  if (!targets.length) { alert('没有可选目标：需要先把某个容器的「初始展开」关掉'); renderProperties(); return; }
+  const targets = type === 'goto' ? pageTargets() : actionTargets();
+  if (!targets.length) {
+    alert(type === 'goto'
+      ? '还没有页面图层：请先用顶栏「页面」菜单新建页面'
+      : '没有可选目标：需要先把某个容器的「初始展开」关掉');
+    renderProperties();
+    return;
+  }
   mutate(`设置 ${id} 点击动作 ${type}`, (doc) => {
     const c = doc.components[id];
     c.actions = c.actions || {};
-    c.actions.click = { type, target: (c.actions.click && c.actions.click.target) || targets[0][0] };
+    // 换动作类型时目标列表也会变（页面 vs 面板）：旧目标仍合法才保留，否则取列表第一个
+    const old = c.actions.click && c.actions.click.target;
+    const keep = old && targets.some(([tid]) => tid === old) ? old : targets[0][0];
+    c.actions.click = { type, target: keep };
   });
 }
 

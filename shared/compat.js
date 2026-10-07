@@ -46,6 +46,28 @@ export function upgradeDoc(doc) {
   return next;
 }
 
+// ---------- v3.1：v2 → v3 一键升级（编辑器「升级为 v3」入口） ----------
+// 纯增量包装：组件树原样成为 presentations.main.components，配套默认风格/变体；
+// 不修改任何组件字段、不改 ID 与父子关系，升级结果必须能通过 validateDoc（v3）。
+// v3 文档无需升级（抛错）；v1 请先走 upgradeDoc 成为 v2 再升级。
+export function upgradeDocToV3(doc) {
+  inspectDocVersion(doc);
+  if (doc.version === DOC_VERSION_V3) throw new CompatError('E_VERSION', '文档已经是 v3，无需升级');
+  if (doc.version !== DOC_VERSION) {
+    throw new CompatError('E_VERSION', `仅支持将 v2 文档升级为 v3（当前版本 ${JSON.stringify(doc.version)}；v1 文档保存一次后即为 v2）`);
+  }
+  const next = JSON.parse(JSON.stringify(doc));
+  const components = next.components;
+  delete next.components;
+  next.version = DOC_VERSION_V3;
+  next.features = {};
+  next.styles = { main: { label: '默认风格', tokens: {} } };
+  next.presentations = { main: { label: '主呈现', components } };
+  next.variants = [{ id: 'main', label: '默认', presentation: 'main', style: 'main', overrides: { tokens: {}, components: {} } }];
+  next.activeVariant = 'main';
+  return next;
+}
+
 // 升级前后的语义一致性检查（测试与关键写入路径可选用）：
 // 组件表键、父子关系、children 顺序、资源、修订号、画布必须完全一致。
 export function migrationPreservesSemantics(before, after) {

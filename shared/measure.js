@@ -40,8 +40,21 @@ function overflowDirs(child, parent, tol = 1) {
 
 const SIZE_TOL = 1.5;   // 尺寸/位置对照容差（px），吸收亚像素取整
 
-export function checkSnapshot(doc, snapshot) {
+// opts.pageIds（v3.1，可选）：页面图层容器 id 列表。实测快照把全部页面渲染在一起，
+// 但运行时它们是互斥显示的——不同页面之间（含页面与常驻层之间）的重叠不报告。
+export function checkSnapshot(doc, snapshot, opts = {}) {
   const issues = [];
+  const pageOwners = new Map(); // 组件id → 所属页面容器id（页面外组件无归属）
+  for (const pid of (Array.isArray(opts.pageIds) ? opts.pageIds : [])) {
+    const pc = doc.components && doc.components[pid];
+    if (!pc) continue;
+    const walk = (id) => {
+      pageOwners.set(id, pid);
+      const cc = doc.components[id];
+      if (cc && cc.children) cc.children.forEach(walk);
+    };
+    walk(pid);
+  }
 
   // ---------- 第 1 层：快照有效性门禁 ----------
   if (!snapshot || typeof snapshot !== 'object') {
@@ -204,6 +217,8 @@ export function checkSnapshot(doc, snapshot) {
         const a = kids[i], b = kids[j];
         if (!isAbsolutePlacement(a.c, comp) && !isAbsolutePlacement(b.c, comp)) continue;
         if (!rectsIntersect(a.m, b.m, 2)) continue;
+        // v3.1 页面豁免：归属不同页面（或一方在页面外）的重叠不判——页面互斥显示
+        if (pageOwners.get(a.cid) !== pageOwners.get(b.cid)) continue;
         const ca = doc.components[a.cid], cb = doc.components[b.cid];
         const noOverlap = (ca && ca.flags && ca.flags.noOverlap) || (cb && cb.flags && cb.flags.noOverlap);
         issue(issues, noOverlap ? 'error' : 'warning', noOverlap ? 'E_OVERLAP' : 'W_OVERLAP_FREE',

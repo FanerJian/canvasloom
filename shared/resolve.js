@@ -9,7 +9,7 @@
 //      的微调（覆盖同名键）；字面量（非 $ 开头）原样保留，不被令牌覆盖；
 //   3. 变体补丁：overrides.components[组件id] 的样式补丁浅合并进该组件
 //      style（补丁优先；补丁中的 $ 令牌引用同样被替换）；
-//   4. 剥离 v3 专属字段 featureId/bind/actions/initiallyOpen —— 保证解析
+//   4. 剥离 v3 专属字段 featureId/bind/actions/initiallyOpen/page —— 保证解析
 //      结果不含任何 v3 组件扩展字段；交互语义由后续运行时模块从原 v3 文档读取；
 //   5. v3 顶层段（features/styles/presentations/variants/activeVariant）不进入结果。
 // 解析失败一律抛结构化错误 ResolveError（code/message + 定位字段直接挂在错误
@@ -199,12 +199,13 @@ export function resolveVariant(doc, variantId) {
   }
   for (const id of Object.keys(comps)) {
     const c = comps[id];
-    // 剥离 v3 专属字段：解析结果必须能通过 v2 校验；交互语义由运行时模块
-    // 从原 v3 文档读取，不进解析结果
+    // 剥离 v3 专属字段：解析结果必须能通过 v2 校验；交互语义（actions/initiallyOpen/page）
+    // 由运行时模块从原 v3 文档读取，不进解析结果
     delete c.featureId;
     delete c.bind;
     delete c.actions;
     delete c.initiallyOpen;
+    delete c.page;
     // 变体补丁先浅合并（补丁优先），令牌替换随后统一进行——补丁中的 $ 引用同样被替换
     if (patches && patches[id]) {
       c.style = Object.assign({}, c.style, patches[id]);

@@ -1,7 +1,7 @@
 // ============================================================
 // 编辑器入口：装配、工具栏、快捷键、保存与外部修改协同
 // ============================================================
-import { state, on, select, undo, redo, loadProject, adoptExternal, selectedComp, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas, viewDoc } from './store.js';
+import { state, on, select, undo, redo, loadProject, adoptExternal, selectedComp, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas, viewDoc, pagesOfDoc, setActivePage, addPage, mutateDoc } from './store.js';
 import { UI_MODES } from '../shared/modes.js';
 import { LIMITS } from '../shared/protocol.js';
 import { validateDoc } from '../shared/validate.js';
@@ -11,7 +11,7 @@ import { renderFeaturesPanel, openVariantWizard, switchVariant } from './v3panel
 import { initPreviewBar, renderPreviewPane, runCheck, runExport } from './preview.js';
 import { listProjects, getProject, createProject, saveProject, connectEvents } from './api.js';
 import { closeContextMenu } from './ctxmenu.js';
-import { upgradeDoc, CompatError } from '../shared/compat.js';
+import { upgradeDoc, upgradeDocToV3, CompatError } from '../shared/compat.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -46,12 +46,13 @@ window.addEventListener('error', (e) => {
 function renderAll(detail = {}) {
   if (state.doc) {
     if (state.mode === 'design') {
-      // 仅选中变化时只刷新选中框，避免重建画布打断进行中的拖拽
+      // 仅选中变化时只刷新选中框，避免重建画布打断进行中的拖拽；
+      // 但选点跨页面时需要重建画布（页面显随选点切换，v3.1）
       if (detail.reason === 'select') {
         // 选中/取消选中时自动展开右栏（组件属性或画布设置）；之后仍可手动收起
         document.body.classList.remove('hide-right');
         syncPanelToggles();
-        refreshOverlay();
+        if (detail.pageChanged) renderCanvas(); else refreshOverlay();
       } else {
         renderCanvas();
       }
@@ -78,6 +79,8 @@ function renderAll(detail = {}) {
   if (esCard) esCard.classList.toggle('hidden', !!state.doc);
   renderToolbarState();
   renderVariantMenu();
+  renderPageMenu();
+  renderUpgradeEntry();
   // 调试/自动化检查出口（只读快照）
   window.__canvasloom = {
     name: state.name, revision: state.revision, dirty: state.dirty,
@@ -376,6 +379,80 @@ function renderVariantMenu() {
   menu.appendChild(add);
 }
 
+// ---------- 顶栏页面图层菜单（v3 文档显示；v3.1） ----------
+function renderPageMenu() {
+  const wrap = $('page-wrap'), btn = $('btn-page'), menu = $('page-menu'), label = $('page-label');
+  if (!wrap || !btn || !menu || !label) return;
+  const doc = state.doc;
+  const isV3 = !!doc && doc.version === 3;
+  wrap.classList.toggle('hidden', !isV3);
+  if (!isV3) { menu.classList.add('hidden'); btn.setAttribute('aria-expanded', 'false'); return; }
+  const pages = pagesOfDoc();
+  const view = viewDoc();
+  const nameOf = (pid) => {
+    const c = view ? view.components[pid] : null;
+    return (c && c.name) || pid;
+  };
+  const cur = pages.includes(state.activePageId) ? state.activePageId : pages[0] || null;
+  label.textContent = cur ? nameOf(cur) : '（无页面）';
+  menu.textContent = '';
+  if (!pages.length) {
+    const hint = document.createElement('div');
+    hint.className = 'p-hint tb-menu-hint';
+    hint.textContent = '页面是铺满画布的图层；给按钮配「goto 跳转页面」动作即可切换页面。';
+    menu.appendChild(hint);
+  }
+  for (const pid of pages) {
+    const item = document.createElement('button');
+    item.className = 'tb-btn variant-item' + (pid === cur ? ' current' : '');
+    item.textContent = (pid === cur ? '✓ ' : '') + `${nameOf(pid)}（${pid}）` + (pages[0] === pid ? ' · 起始页' : '');
+    item.addEventListener('click', () => { closeMenus(); setActivePage(pid); });
+    menu.appendChild(item);
+  }
+  if (pages.length) {
+    const sep = document.createElement('div');
+    sep.className = 'tb-menu-sep';
+    menu.appendChild(sep);
+  }
+  const add = document.createElement('button');
+  add.className = 'tb-btn';
+  add.textContent = '＋ 新建页面（图层）';
+  add.addEventListener('click', () => {
+    closeMenus();
+    const id = addPage(`页面 ${pages.length + 1}`);
+    if (id) toast('已新建页面，画布已切换到它；在「功能与交互」里给按钮配 goto 动作可跳到这页', 'ok');
+  });
+  menu.appendChild(add);
+}
+
+// ---------- 「更多」菜单里的 v2→v3 升级入口（v3.1） ----------
+function renderUpgradeEntry() {
+  const btn = $('btn-upgrade-v3');
+  if (!btn) return;
+  btn.classList.toggle('hidden', !(state.doc && state.doc.version !== 3));
+}
+
+function showUpgradeDialog() {
+  if (!state.doc || state.doc.version === 3) return;
+  const box = document.createElement('div');
+  box.className = 'p-hint';
+  box.innerHTML = '升级后本项目获得 v3 能力：<strong>页面图层</strong>（多个页面互相切换）与' +
+    '<strong>点击动作</strong>（按钮开/关面板、跳转页面）。<br><br>' +
+    '原设计内容原样保留为「默认呈现」，组件、资源、布局都不变；升级可 Ctrl+Z 撤销，保存后写入文件。';
+  openModal('升级为 v3 文档', box, [
+    ['取消', () => closeModal()],
+    ['升级', () => {
+      mutateDoc('升级为 v3 文档', (d) => {
+        const up = upgradeDocToV3(d);
+        for (const k of Object.keys(d)) delete d[k];
+        Object.assign(d, up);
+      });
+      closeModal();
+      toast('已升级为 v3：顶栏出现「页面」菜单，选中按钮可配「点击动作」', 'ok');
+    }],
+  ]);
+}
+
 // ---------- 顶栏「更多」菜单与画布选项弹出层 ----------
 function closeMenus() {
   const moreMenu = $('more-menu');
@@ -383,29 +460,37 @@ function closeMenus() {
   const moreWrap = $('more-wrap');
   const varMenu = $('variant-menu');
   const varWrap = $('variant-wrap');
+  const pageMenu = $('page-menu');
+  const pageWrap = $('page-wrap');
   if (moreMenu) moreMenu.classList.add('hidden');
   if (optsMenu) optsMenu.classList.add('hidden');
   if (varMenu) varMenu.classList.add('hidden');
+  if (pageMenu) pageMenu.classList.add('hidden');
   if (moreWrap) moreWrap.classList.remove('open');
   if (varWrap) varWrap.classList.remove('open');
+  if (pageWrap) pageWrap.classList.remove('open');
   const moreBtn = $('btn-more');
   const optsBtn = $('btn-canvas-opts');
   const varBtn = $('btn-variant');
+  const pageBtn = $('btn-page');
   if (moreBtn) moreBtn.setAttribute('aria-expanded', 'false');
   if (optsBtn) { optsBtn.setAttribute('aria-expanded', 'false'); optsBtn.classList.remove('active'); }
   if (varBtn) varBtn.setAttribute('aria-expanded', 'false');
+  if (pageBtn) pageBtn.setAttribute('aria-expanded', 'false');
 }
 
 function initMenus() {
   const moreBtn = $('btn-more'), moreMenu = $('more-menu'), moreWrap = $('more-wrap');
   const optsBtn = $('btn-canvas-opts'), optsMenu = $('canvas-opts-menu');
   const varBtn = $('btn-variant'), varMenu = $('variant-menu'), varWrap = $('variant-wrap');
+  const pageBtn = $('btn-page'), pageMenu = $('page-menu'), pageWrap = $('page-wrap');
   moreBtn.addEventListener('click', () => {
     const open = !moreMenu.classList.toggle('hidden');
     moreWrap.classList.toggle('open', open);
     moreBtn.setAttribute('aria-expanded', String(open));
     optsMenu.classList.add('hidden');
     varMenu.classList.add('hidden');
+    pageMenu.classList.add('hidden');
   });
   // 画布选项是开关集合：点选后保持弹层打开，便于连续切换并看到状态变化
   optsBtn.addEventListener('click', () => {
@@ -415,6 +500,7 @@ function initMenus() {
     moreMenu.classList.add('hidden');
     moreWrap.classList.remove('open');
     varMenu.classList.add('hidden');
+    pageMenu.classList.add('hidden');
   });
   // 变体切换菜单（v3 文档；按钮隐藏时点击不到）
   varBtn.addEventListener('click', () => {
@@ -423,12 +509,25 @@ function initMenus() {
     moreMenu.classList.add('hidden');
     moreWrap.classList.remove('open');
     optsMenu.classList.add('hidden');
+    pageMenu.classList.add('hidden');
   });
+  // 页面图层菜单（v3 文档；v3.1）
+  if (pageBtn && pageMenu && pageWrap) {
+    pageBtn.addEventListener('click', () => {
+      const open = !pageMenu.classList.toggle('hidden');
+      pageBtn.setAttribute('aria-expanded', String(open));
+      pageWrap.classList.toggle('open', open);
+      moreMenu.classList.add('hidden');
+      moreWrap.classList.remove('open');
+      optsMenu.classList.add('hidden');
+      varMenu.classList.add('hidden');
+    });
+  }
   // 点选「更多」里的动作项（复制/粘贴/删除/检查布局）后收起
   moreMenu.addEventListener('click', (e) => { if (e.target.closest('button')) closeMenus(); });
   // 点击外部收起（pointerdown 先于 click，不与按钮自身 toggle 冲突）
   document.addEventListener('pointerdown', (e) => {
-    if (e.target.closest('#more-wrap') || e.target.closest('#canvas-opts-menu') || e.target.closest('#variant-wrap')) return;
+    if (e.target.closest('#more-wrap') || e.target.closest('#canvas-opts-menu') || e.target.closest('#variant-wrap') || e.target.closest('#page-wrap')) return;
     closeMenus();
   });
   // Esc 收起（initKeys 已处理选中与弹窗，这里只管菜单）
@@ -482,6 +581,8 @@ function initToolbar() {
   $('btn-help').addEventListener('click', showShortcuts);
   $('btn-check').addEventListener('click', runCheck);
   $('btn-export').addEventListener('click', runExport);
+  const upBtn = $('btn-upgrade-v3');
+  if (upBtn) upBtn.addEventListener('click', () => { closeMenus(); showUpgradeDialog(); });
   initMenus();
   initLeftTabs();
   initEmptyState();

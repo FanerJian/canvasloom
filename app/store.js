@@ -1,7 +1,7 @@
 // ============================================================
 // 编辑器状态中心：文档、历史（撤销/重做）、选择、缩放、模式
 // ============================================================
-import { findComponent, isContainer, ancestorsOf, LIMITS } from '../shared/protocol.js';
+import { findComponent, isContainer, ancestorsOf, LIMITS, pageIdsOf, newPage } from '../shared/protocol.js';
 import { resolveVariant } from '../shared/resolve.js';
 
 // 缩放/吸附等视图偏好的持久化键（画布行为偏好不进设计文档）
@@ -31,10 +31,40 @@ export const state = {
   lastBlockId: null,  // 刚插入的预设块根 id（连续插入时平级追加，不嵌套）
   lastExternal: null, // 外部修改提示（未被采纳时）
   collapsedTreeIds: new Set(), // 层级树手动折叠的容器 id（纯视图状态，不进文档）
+  activePageId: null, // 设计视图当前显示的页面图层 id（纯视图状态，不进文档；v3.1）
 };
 
 // 预设块面板的场景过滤：null = 跟随文档模式；否则固定浏览某个模式的块
 state.paletteModeId = null;
+
+// ---------- v3.1 页面图层（视图状态） ----------
+// 页面 = 编辑域（活动 presentation）root 直接子元素中 page===true 的容器；首个为起始页。
+// 设计视图一次只显示一个页面；预览/导出的页面切换由交互运行时按 goto 语义管理。
+export function pagesOfDoc() {
+  const doc = state.doc;
+  if (!doc) return [];
+  return pageIdsOf(scopeOf(doc));
+}
+function ensureActivePage() {
+  const pages = pagesOfDoc();
+  if (!pages.includes(state.activePageId)) state.activePageId = pages[0] || null;
+}
+export function setActivePage(id) {
+  if (state.activePageId === id) return;
+  state.activePageId = id;
+  emit({ reason: 'page' });
+}
+// 新建页面图层并立即切换为当前编辑页面；返回新页面 id
+export function addPage(name) {
+  if (!state.doc || state.doc.version !== 3) return null;
+  let createdId = null;
+  mutate(`新建页面「${name}」`, (doc) => {
+    const comp = newPage(doc, name);
+    createdId = comp.id;
+  });
+  if (createdId) setActivePage(createdId);
+  return createdId;
+}
 
 // ---------- v3 解析视图与编辑域（M5） ----------
 // 设计视图：v2 文档即 doc 本体；v3 文档按 activeVariant 解析成 v2 形状文档——
@@ -113,6 +143,8 @@ export function loadProject(name, doc) {
   history.redo = [];
   coalesce = { key: null, time: 0 };
   computeView();
+  state.activePageId = null; // 页面视图状态从起始页开始（无页面文档保持 null）
+  ensureActivePage();
   emit({ reason: 'load' });
 }
 
@@ -126,6 +158,7 @@ export function adoptExternal(doc) {
   state.dirty = false;
   computeView();
   if (state.selection && !findComponent(scopeOf(doc), state.selection)) state.selection = null;
+  ensureActivePage();
   coalesce = { key: null, time: 0 };
   emit({ reason: 'external' });
 }
@@ -152,6 +185,7 @@ function applyMutation(label, fn, opts, scopeEdit) {
   computeView();
   state.dirty = true;
   if (state.selection && !findComponent(scopeOf(next), state.selection)) state.selection = null;
+  ensureActivePage(); // 页面被删除/撤销时回落到起始页
   emit({ reason: 'mutate', label, skipPanels: !!opts.skipPanels });
 }
 
@@ -166,6 +200,7 @@ export function undo() {
   computeView();
   state.dirty = true;
   if (state.selection && !findComponent(scopeOf(state.doc), state.selection)) state.selection = null;
+  ensureActivePage();
   coalesce = { key: null, time: 0 };
   emit({ reason: 'history' });
 }
@@ -178,6 +213,7 @@ export function redo() {
   computeView();
   state.dirty = true;
   if (state.selection && !findComponent(scopeOf(state.doc), state.selection)) state.selection = null;
+  ensureActivePage();
   coalesce = { key: null, time: 0 };
   emit({ reason: 'history' });
 }
@@ -185,12 +221,27 @@ export function redo() {
 // ---------- 普通状态 ----------
 export function select(id) {
   if (state.selection === id) return;
+  const prevPage = state.activePageId;
   state.selection = id;
+  // 选点落在某个页面图层内（或就是页面）时，设计视图自动切到该页面（v3.1）
+  if (id) {
+    const scope = scopeOf(state.doc);
+    let ownerPage = null;
+    const self = scope.components ? scope.components[id] : null;
+    if (self && self.page === true) ownerPage = id;
+    if (!ownerPage) {
+      for (const pid of ancestorsOf(scope, id)) {
+        const c = scope.components[pid];
+        if (c && c.page === true) { ownerPage = pid; break; }
+      }
+    }
+    if (ownerPage) state.activePageId = ownerPage;
+  }
   // 新选点若落在折叠的子树里，展开其祖先链，保证层级树中可见
   if (id) for (const pid of ancestorsOf(scopeOf(state.doc), id)) state.collapsedTreeIds.delete(pid);
   // 用户把选点移到别处后，"连续插入预设块"的平级追加记忆即失效
   if (id !== state.lastBlockId) state.lastBlockId = null;
-  emit({ reason: 'select' });
+  emit({ reason: 'select', pageChanged: state.activePageId !== prevPage });
 }
 
 export function setZoom(z) {

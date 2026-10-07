@@ -76,15 +76,18 @@ export const STYLE_FIELDS = [
 ];
 
 // ---------- v3 新增（冻结决策见 商业级路线图.md §4；M1 只做校验，渲染由 M2 实现） ----------
-// v3 组件白名单 = v2 组件白名单 + 以下四个字段（validate.js 据此分流）
-export const V3_COMPONENT_EXTRA_FIELDS = ['featureId', 'bind', 'actions', 'initiallyOpen'];
+// v3 组件白名单 = v2 组件白名单 + 以下字段（validate.js 据此分流）；
+// v3.1（2026-10-07）增补 page（页面图层）
+export const V3_COMPONENT_EXTRA_FIELDS = ['featureId', 'bind', 'actions', 'initiallyOpen', 'page'];
 
 // v3 样式白名单：与 v2 共用 STYLE_FIELDS（fontFamily/deco 已并入共享表，见上；令牌值可出现在任何样式字段）
 export const V3_STYLE_FIELDS = STYLE_FIELDS;
 
-// actions 首版仅 click 事件，类型仅 toggle/open/close（冻结决策 5）
+// actions 仅 click 事件；类型首版 toggle/open/close（冻结决策 5），
+// v3.1（2026-10-07）增补 goto（跳转页面）。goto 目标 = 页面容器（page:true，见 newPage）；
+// toggle/open/close 目标 = initiallyOpen:false 的普通容器（页面容器不作面板目标，校验层分流）。
 export const V3_ACTION_EVENTS = ['click'];
-export const V3_ACTION_TYPES = ['toggle', 'open', 'close'];
+export const V3_ACTION_TYPES = ['toggle', 'open', 'close', 'goto'];
 
 // bind 值语法：feature:<id>.<路径>；路径 = 点分键（标识符）与 [n] 数组下标的组合，至少一段。
 // 校验期只查语法与 feature 存在性，路径存在性留给渲染期（冻结决策 5）。
@@ -97,11 +100,13 @@ export const V3_BIND_PATTERN = /^feature:([A-Za-z_][A-Za-z0-9_]{0,63})((\.[A-Za-
 //   E_TOKEN_DANGLING           style 值引用了不存在的令牌
 //   E_TOKEN_INVALID_CONTEXT    布局字段（size/position/layout/area）出现 $ 令牌引用
 //   E_TOKEN_UNKNOWN_OVERRIDE   variant overrides.tokens 新增了基础风格没有的令牌键
-//   E_ACTION_TARGET_INVALID    actions 结构非法，或目标不是本 presentation 内 initiallyOpen:false 的容器
+//   E_ACTION_TARGET_INVALID    actions 结构非法；或 toggle/open/close 目标不是本 presentation 内
+//                              initiallyOpen:false 的普通容器；或 goto 目标不是页面容器（page:true）
 //   E_VARIANT_UNKNOWN          variant 引用的 presentation/style 不存在，或 activeVariant 悬空
 //   E_V3_SECTION_READONLY      updateDocument 试图修改 v3 只读段
 //   E_FEATURE_INVALID / E_STYLE_INVALID / E_PRESENTATION_INVALID / E_VARIANT_INVALID
 //                              features/styles/presentations/variants 段的结构错误
+//   E_PAGE_INVALID             页面容器（page:true）位置或字段组合非法（v3.1）
 
 // ---------- v3 最小工厂（供后续模块使用；字段全部显式传入，不留隐式默认） ----------
 // feature/style 以 id 为键存入对应表，工厂返回表项本体；variant 是数组项，id 在对象内。
@@ -347,6 +352,31 @@ export function newComponent(doc, type, parentId, extra = {}) {
   parent.children = parent.children || [];
   parent.children.push(id);
   return comp;
+}
+
+// ---------- v3.1 页面图层 ----------
+// 页面 = root 的直接子容器，铺满画布（独立摆放 + percent 100×100，不受 root 布局模式影响），
+// 显隐由运行时/设计视图按「页面切换」管理（不走 initiallyOpen，校验层禁止两者混用）。
+// root.children 顺序即页面顺序，第一个页面为起始页。
+export function newPage(doc, name) {
+  const rootComp = findComponent(doc, 'root');
+  if (!rootComp || !isContainer(rootComp)) throw new Error('缺少根组件 root，无法创建页面');
+  const comp = newComponent(doc, 'container', 'root', { name: name || '页面', layoutMode: 'free' });
+  comp.page = true;
+  comp.placement = { mode: 'absolute' };
+  comp.position = { left: 0, top: 0 };
+  comp.size = { width: { mode: 'percent', value: 100 }, height: { mode: 'percent', value: 100 } };
+  delete comp.area;
+  return comp;
+}
+
+// 按顺序列出组件表中的页面容器（root 直接子元素中 page===true 者）；首个为起始页。
+// 入参可以是完整文档或仅含 components 的视图对象（编辑域 scope / presentation 组件树同构）。
+export function pageIdsOf(doc) {
+  const comps = (doc && doc.components) || {};
+  const root = comps.root;
+  if (!root || !Array.isArray(root.children)) return [];
+  return root.children.filter((id) => comps[id] && comps[id].type === 'container' && comps[id].page === true);
 }
 
 // 找网格中第一个未被占用的格子（1-based）

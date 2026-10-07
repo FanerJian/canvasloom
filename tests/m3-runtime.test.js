@@ -244,9 +244,9 @@ test('extractInteractionSpec：popup 变体提取 initiallyClosed 与 actions；
   assert.deepEqual(Object.keys(specB1.actions), ['menu_btn', 'settings_close']);
   assert.deepEqual(specB1.actions.menu_btn, { click: { type: 'toggle', target: 'panels_root' } });
   assert.deepEqual(specB1.actions.settings_close, { click: { type: 'close', target: 'panels_root' } });
-  assert.deepEqual(extractInteractionSpec(fixture, 'A1'), { initiallyClosed: [], actions: {} }, 'persistent 无可展开面板');
-  assert.deepEqual(extractInteractionSpec(fixture, 'NOPE'), { initiallyClosed: [], actions: {} }, '未知变体返回空 spec');
-  assert.deepEqual(extractInteractionSpec(null, 'B1'), { initiallyClosed: [], actions: {} });
+  assert.deepEqual(extractInteractionSpec(fixture, 'A1'), { initiallyClosed: [], actions: {}, pages: [] }, 'persistent 无可展开面板');
+  assert.deepEqual(extractInteractionSpec(fixture, 'NOPE'), { initiallyClosed: [], actions: {}, pages: [] }, '未知变体返回空 spec');
+  assert.deepEqual(extractInteractionSpec(null, 'B1'), { initiallyClosed: [], actions: {}, pages: [] });
   assert.deepEqual(structuredClone(fixture), before, 'doc 未被修改');
 });
 

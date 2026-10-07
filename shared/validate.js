@@ -455,7 +455,7 @@ function validateV3Extras(issues, comps, c, ctx) {
       }
     }
   }
-  // actions：仅 button；click → { type: toggle|open|close, target }
+  // actions：仅 button；click → { type: toggle|open|close|goto, target }
   if (c.actions !== undefined) {
     if (c.type !== 'button') {
       issue(issues, 'error', 'E_FIELD_INVALID', `组件 "${c.id}"（${c.type}）不支持 actions（仅 button）`, c.id, 'actions');
@@ -469,6 +469,22 @@ function validateV3Extras(issues, comps, c, ctx) {
       issue(issues, 'error', 'E_FIELD_INVALID', `组件 "${c.id}"（${c.type}）不支持 initiallyOpen（仅 container）`, c.id, 'initiallyOpen');
     } else if (typeof c.initiallyOpen !== 'boolean') {
       issue(issues, 'error', 'E_FIELD_TYPE', `容器 "${c.id}" 的 initiallyOpen 必须为布尔值`, c.id, 'initiallyOpen');
+    }
+  }
+  // page（v3.1）：仅 container，boolean；true 时必须是 root 的直接子元素（页面图层），
+  // 且不得与 initiallyOpen 混用——页面显隐由页面切换管理，不走「初始展开」
+  if (c.page !== undefined) {
+    if (c.type !== 'container') {
+      issue(issues, 'error', 'E_FIELD_INVALID', `组件 "${c.id}"（${c.type}）不支持 page（仅 container 可作为页面图层）`, c.id, 'page');
+    } else if (typeof c.page !== 'boolean') {
+      issue(issues, 'error', 'E_FIELD_TYPE', `容器 "${c.id}" 的 page 必须为布尔值`, c.id, 'page');
+    } else if (c.page === true) {
+      if (c.id === 'root' || c.parent !== 'root') {
+        issue(issues, 'error', 'E_PAGE_INVALID', `容器 "${c.id}" 标记了 page:true，但页面图层必须是根容器 root 的直接子元素`, c.id, 'page');
+      }
+      if (c.initiallyOpen !== undefined) {
+        issue(issues, 'error', 'E_PAGE_INVALID', `页面容器 "${c.id}" 不需要 initiallyOpen（显隐由页面切换管理，二者不得混用）`, c.id, 'page');
+      }
     }
   }
 }
@@ -489,8 +505,9 @@ function scanTokenMisuse(issues, c, node, path) {
   }
 }
 
-// actions 结构校验：事件仅 click；type 仅 toggle/open/close；
-// target 必须是同一 presentation 内存在、且 initiallyOpen === false 的 container。
+// actions 结构校验：事件仅 click；type 为 toggle/open/close/goto；
+// toggle/open/close 的 target 必须是同一 presentation 内存在、且 initiallyOpen === false 的普通容器；
+// goto 的 target 必须是页面容器（page === true）；页面容器不可作为面板目标（显隐由页面切换管理）。
 function validateActions(issues, comps, c) {
   const a = c.actions;
   if (!isPlainObject(a)) { issue(issues, 'error', 'E_FIELD_TYPE', `组件 "${c.id}" 的 actions 必须为对象`, c.id, 'actions'); return; }
@@ -510,13 +527,18 @@ function validateActions(issues, comps, c) {
       continue;
     }
     if (typeof act.target !== 'string' || !act.target) {
-      issue(issues, 'error', 'E_ACTION_TARGET_INVALID', `组件 "${c.id}" 的 ${at}.target 缺失（需指向本 presentation 内 initiallyOpen:false 的容器）`, c.id, at + '.target');
+      issue(issues, 'error', 'E_ACTION_TARGET_INVALID', `组件 "${c.id}" 的 ${at}.target 缺失（面板动作需指向 initiallyOpen:false 的容器，goto 需指向页面容器）`, c.id, at + '.target');
       continue;
     }
     const t = comps[act.target];
-    if (!t || t.type !== 'container' || t.initiallyOpen !== false) {
+    if (act.type === 'goto') {
+      if (!t || t.type !== 'container' || t.page !== true) {
+        issue(issues, 'error', 'E_ACTION_TARGET_INVALID',
+          `组件 "${c.id}" 的 ${at}.target "${act.target}" 无效：goto 的目标必须是同一 presentation 内存在、且 page 为 true 的页面容器（顶栏「页面」菜单可新建）`, c.id, at + '.target');
+      }
+    } else if (!t || t.type !== 'container' || t.initiallyOpen !== false || t.page === true) {
       issue(issues, 'error', 'E_ACTION_TARGET_INVALID',
-        `组件 "${c.id}" 的 ${at}.target "${act.target}" 无效：必须是同一 presentation 内存在、且 initiallyOpen 为 false 的容器`, c.id, at + '.target');
+        `组件 "${c.id}" 的 ${at}.target "${act.target}" 无效：必须是同一 presentation 内存在、且 initiallyOpen 为 false 的容器（页面容器请用 goto 跳转）`, c.id, at + '.target');
     }
   }
 }
