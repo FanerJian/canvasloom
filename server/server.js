@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { validateDoc } from '../shared/validate.js';
 import { newDoc } from '../shared/protocol.js';
+import { applyTemplate } from '../shared/templates.js';
 import { UI_MODES, DEFAULT_MODE } from '../shared/modes.js';
 import { buildPreviewHtml } from '../shared/export-html.js';
 import { withFileLock, lockFileFor } from '../shared/filelock.js';
@@ -188,13 +189,15 @@ async function handleApi(req, res, url) {
     const mode = body.mode && UI_MODES[body.mode] ? body.mode : DEFAULT_MODE;
     // 起步布局：free（自由摆放，推荐）或 vertical（自动排列）；其余按 vertical
     const startLayout = body.layout === 'free' ? 'free' : 'vertical';
+    // 起步模板（S2）：blank=纯空白；未知模板名按 blank 处理（applyTemplate 内部兜底）
+    const templateId = typeof body.template === 'string' ? body.template : 'blank';
     const file = projectFile(name);
     let result;
     try {
       // 锁内检查存在性并写入，避免并发创建双写
       result = withFileLock(lockFileFor(file), () => {
         if (fsSync.existsSync(file)) return { exists: true };
-        const doc = newDoc(name, mode, startLayout);
+        const doc = applyTemplate(newDoc(name, mode, startLayout), templateId);
         atomicWriteSync(file, JSON.stringify(doc, null, 2));
         return { ok: true, doc };
       });

@@ -3,6 +3,7 @@
 // ============================================================
 import { state, on, select, undo, redo, loadProject, adoptExternal, adoptDraft, pushUndoEntry, selectedComp, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas, viewDoc, pagesOfDoc, setActivePage, addPage, mutateDoc, saveDraftNow, scheduleDraftSave, clearDraft, loadDraft } from './store.js';
 import { UI_MODES } from '../shared/modes.js';
+import { TEMPLATES, DEFAULT_TEMPLATE } from '../shared/templates.js';
 import { LIMITS } from '../shared/protocol.js';
 import { validateDoc } from '../shared/validate.js';
 import { initCanvas, renderCanvas, refreshOverlay, fitZoom, nudge } from './canvas.js';
@@ -229,6 +230,27 @@ async function showNewDialog() {
     grid.appendChild(card);
   }
   box.appendChild(grid);
+  // 起步模板（S2）：只给结构与用途，区域之后随时可改可删
+  let chosenTemplate = DEFAULT_TEMPLATE;
+  const tplLabel = document.createElement('div');
+  tplLabel.className = 'p-label new-label';
+  tplLabel.textContent = '起步模板（区域和用途已标好，内容之后自己填）';
+  box.appendChild(tplLabel);
+  const tplGrid = document.createElement('div');
+  tplGrid.className = 'mode-grid';
+  for (const [id, t] of Object.entries(TEMPLATES)) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'mode-card' + (id === chosenTemplate ? ' active' : '');
+    card.innerHTML = `<strong>${t.label}</strong><span class="mode-desc">${t.desc}</span>`;
+    card.addEventListener('click', () => {
+      chosenTemplate = id;
+      tplGrid.querySelectorAll('.mode-card').forEach((c) => c.classList.remove('active'));
+      card.classList.add('active');
+    });
+    tplGrid.appendChild(card);
+  }
+  box.appendChild(tplGrid);
   const layoutLabel = document.createElement('div');
   layoutLabel.className = 'p-label new-label';
   layoutLabel.textContent = '起步方式（之后随时可在右侧面板切换）';
@@ -266,12 +288,12 @@ async function showNewDialog() {
       const name = input.value.trim();
       if (!name) return;
       guardSwitchProject(async () => {
-        const r = await createProject(name, chosen, startLayout);
+        const r = await createProject(name, chosen, startLayout, chosenTemplate);
         if (!r.ok) { toast('创建失败：' + (r.error || '未知错误'), 'bad'); return; }
         closeModal(); // 未脏路径下守卫不弹窗，这里负责关掉新建弹窗
         loadProject(name, r.doc);
         localStorage.setItem('canvasloom:last', name);
-        toast(`已创建「${name}」（${UI_MODES[chosen].label} · ${startLayout === 'free' ? '自由摆放' : '自动排列'}）`, 'ok');
+        toast(`已创建「${name}」（${UI_MODES[chosen].label} · ${TEMPLATES[chosenTemplate].label}）`, 'ok');
       });
     }],
   ]);
@@ -286,6 +308,8 @@ let saving = false;
 async function save({ force } = {}) {
   if (!state.doc || !state.name || saving) return;
   saving = true;
+  state.saving = true;
+  renderToolbarState();
   try {
     const session = { name: state.name, doc: state.doc, seq: state.editSeq };
     const report = validateDoc(session.doc);
@@ -321,17 +345,21 @@ async function save({ force } = {}) {
     }
     if (r.status === 409) {
       state._serverRevision = r.currentRevision;
+      state.conflict = true; // 顶栏状态显示「存在冲突」，处理完成后随加载/保存清除
+      renderToolbarState();
       const box = document.createElement('div');
       box.innerHTML = `<div class="p-hint">文件在编辑器之外被修改（agent 或 CLI）。<br>服务器当前修订号：<strong>${r.currentRevision}</strong>，本次保存基于：<strong>${base}</strong>。<br><br>建议"加载最新"以免覆盖（当前未保存内容会保留为可撤销记录，Ctrl+Z 找回）；选择"强制保存"将以当前画布内容覆盖外部修改（可撤销）。</div>`;
       openModal('修订号冲突', box, [
-        ['加载最新', async () => { closeModal(); await reloadLatestFromDisk(); }],
-        ['强制保存', async () => { closeModal(); await save({ force: true }); }, 'danger'],
+        ['加载最新', async () => { state.conflict = false; closeModal(); await reloadLatestFromDisk(); }],
+        ['强制保存', async () => { state.conflict = false; closeModal(); await save({ force: true }); }, 'danger'],
       ]);
       return;
     }
     toast('保存失败：' + (r.error || '未知错误'), 'bad');
   } finally {
     saving = false;
+    state.saving = false;
+    renderToolbarState();
   }
 }
 
@@ -353,7 +381,7 @@ function connect() {
         toast('设计已被外部修改（agent/CLI），已自动刷新；可撤销', 'info');
       }
     }
-  });
+  }, (down) => { state.connDown = down; renderToolbarState(); });
 }
 
 // ---------- 复制/删除 ----------
@@ -414,7 +442,7 @@ function showShortcuts() {
   openModal('键盘快捷键', box, [['知道了', () => closeModal()]]);
 }
 
-// ---------- 面板开合记忆（localStorage；首次无存档默认左右都收起——打开即画布） ----------
+// ---------- 面板开合记忆（localStorage；首次无存档默认两侧展开，新手能直接看到带文字的工具入口；之后按偏好记忆） ----------
 const PANELS_KEY = 'canvasloom.panels';
 function loadPanelPrefs() {
   let saved = null;
@@ -423,7 +451,7 @@ function loadPanelPrefs() {
     document.body.classList.toggle('hide-left', !saved.left);
     document.body.classList.toggle('hide-right', !saved.right);
   } else {
-    document.body.classList.add('hide-left', 'hide-right');
+    document.body.classList.remove('hide-left', 'hide-right');
   }
   syncPanelToggles();
 }
@@ -463,7 +491,7 @@ function renderVariantMenu() {
   menu.appendChild(sep);
   const add = document.createElement('button');
   add.className = 'tb-btn';
-  add.textContent = '＋ 新建变体（向导）…';
+  add.textContent = '＋ 新建方案（向导）…';
   add.addEventListener('click', () => { closeMenus(); openVariantWizard(); });
   menu.appendChild(add);
 }

@@ -16,10 +16,10 @@ export async function getProject(name) {
   return toJson(await fetch('/api/project?name=' + encodeURIComponent(name)));
 }
 
-export async function createProject(name, mode, startLayout) {
+export async function createProject(name, mode, startLayout, template) {
   return toJson(await fetch('/api/project', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name, mode, layout: startLayout }),
+    body: JSON.stringify({ name, mode, layout: startLayout, template: template || 'blank' }),
   }));
 }
 
@@ -37,12 +37,13 @@ export async function exportBundle(payload) {
   }));
 }
 
-export function connectEvents(handler) {
+export function connectEvents(handler, onConnChange) {
   const es = new EventSource('/api/events');
+  es.onopen = () => { if (onConnChange) onConnChange(false); };
   es.onmessage = (e) => {
     try { handler(JSON.parse(e.data)); } catch { /* 忽略坏消息 */ }
   };
-  es.onerror = () => { /* 断线后 EventSource 自动重连 */ };
+  es.onerror = () => { if (onConnChange) onConnChange(true); /* 断线后 EventSource 自动重连 */ };
   return es;
 }
 

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>界面工坊 CanvasLoom</title>
-<link rel="stylesheet" href="/app/styles.css?v=9">
+<link rel="stylesheet" href="/app/styles.css?v=10">
 </head>
 <body>
 <header id="topbar">
@@ -19,13 +19,12 @@
   <div class="tb-group proj">
     <span id="proj-name" class="proj-name">（未打开）</span>
     <span id="proj-mode" class="proj-mode" title="场景模式（决定画布预设、新组件默认样式与预设块）"></span>
-    <span id="proj-dirty" class="proj-dirty" title="有未保存的修改">●</span>
-    <span id="proj-rev" class="proj-rev"></span>
+    <span id="proj-status" class="proj-status"></span>
   </div>
 
   <div class="tb-menu-wrap hidden" id="variant-wrap">
-    <button id="btn-variant" class="tb-btn" title="切换显示变体（v3 文档）" aria-haspopup="true" aria-expanded="false">
-      <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5" opacity=".45"/></svg>变体：<span id="variant-label"></span>
+    <button id="btn-variant" class="tb-btn" title="切换显示方案（v3 文档；同一设计可保存多个呈现方案）" aria-haspopup="true" aria-expanded="false">
+      <svg viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5" opacity=".45"/></svg>方案：<span id="variant-label"></span>
       <svg class="tb-caret" viewBox="0 0 24 24"><path d="M6 9.5l6 6 6-6"/></svg>
     </button>
     <div id="variant-menu" class="tb-menu hidden"></div>
@@ -120,9 +119,13 @@
     <div class="side-tabs" role="tablist" aria-label="左侧面板">
       <button id="tab-add" class="side-tab active" role="tab" aria-selected="true">添加</button>
       <button id="tab-tree" class="side-tab" role="tab" aria-selected="false">层级</button>
-      <button id="tab-fs" class="side-tab" role="tab" aria-selected="false">功能风格</button>
+      <button id="tab-fs" class="side-tab" role="tab" aria-selected="false">风格</button>
     </div>
     <div id="left-page-add" class="left-page">
+      <section class="side-sec">
+        <h3>起步区域 <span class="sec-tag">带用途说明</span></h3>
+        <div id="pal-regions"></div>
+      </section>
       <section class="side-sec">
         <h3>预设块 <span class="sec-tag">一键成套</span></h3>
         <div id="pal-blocks"></div>
@@ -217,6 +220,6 @@
 <div id="toast-root"></div>
 
 <script src="/vendor/html2canvas.min.js"></script>
-<script type="module" src="/app/main.js?v=9"></script>
+<script type="module" src="/app/main.js?v=10"></script>
 </body>
 </html>

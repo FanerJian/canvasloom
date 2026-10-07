@@ -34,6 +34,9 @@ export const state = {
   lastExternal: null, // 外部修改提示（未被采纳时）
   collapsedTreeIds: new Set(), // 层级树手动折叠的容器 id（纯视图状态，不进文档）
   activePageId: null, // 设计视图当前显示的页面图层 id（纯视图状态，不进文档；v3.1）
+  saving: false,      // 正在保存（顶栏状态文字，S2）
+  connDown: false,    // 与本地服务连接中断（SSE 断开，自动重连中）
+  conflict: false,    // 修订号冲突未处理（顶栏显示「存在冲突」）
 };
 
 // 预设块面板的场景过滤：null = 跟随文档模式；否则固定浏览某个模式的块
@@ -139,6 +142,7 @@ export function loadProject(name, doc, opts = {}) {
   state.name = name;
   state.revision = doc.revision;
   state.dirty = false;
+  state.conflict = false; // 载入新文档即离开冲突状态（顶栏状态文字，S2）
   state.selection = null;
   state.mode = 'design';
   state.lastBlockId = null;

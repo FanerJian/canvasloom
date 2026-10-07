@@ -114,13 +114,16 @@ svg { display: block; }
 #btn-del:hover:not(:disabled) { background: var(--danger-soft); color: var(--danger); }
 
 .proj-name { font-weight: 600; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.proj-dirty { color: #f59e0b; font-size: 13px; line-height: 1; animation: dirtyPulse 2s infinite; }
-@keyframes dirtyPulse { 50% { opacity: .35; } }
-.proj-rev {
-  font-size: 11px; color: var(--text-3);
+/* 保存状态文字（S2）：已保存 / 未保存 / 保存中 / 连接中断 / 存在冲突 */
+.proj-status {
+  font-size: 11px; color: var(--text-3); white-space: nowrap;
   background: var(--surface-2); border: 1px solid var(--border);
-  padding: 1px 8px; border-radius: 99px; white-space: nowrap;
+  padding: 1px 8px; border-radius: 99px;
 }
+.proj-status.st-ok { color: #15803d; }
+.proj-status.st-warn { color: #b45309; animation: dirtyPulse 2s infinite; }
+.proj-status.st-bad { color: var(--danger, #dc2626); }
+@keyframes dirtyPulse { 50% { opacity: .35; } }
 .seg {
   display: flex; align-items: center; gap: 2px;
   background: var(--bg); border-radius: 9px; padding: 2px;

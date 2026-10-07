@@ -103,6 +103,7 @@ function blockInsertionTarget() {
 
 // ================= 组件库 =================
 export function renderPalette() {
+  renderRegionPalette();
   const list = document.getElementById('pal-list');
   list.textContent = '';
   for (const type of TYPE_IDS) {
@@ -115,6 +116,88 @@ export function renderPalette() {
     b.addEventListener('click', () => addComponent(type));
     attachPaletteDrag(b, { kind: 'component', type });
     list.appendChild(b);
+  }
+}
+
+// ================= 起步区域（S2） =================
+// 粗布局入口：带用途说明（purpose）的常用分区，落位后随时改名改样式。
+// 列表占位/操作区会带最小内容骨架，说明条目与用途；不预设完整样式。
+const REGION_PRESETS = [
+  { key: 'region', label: '区域', icon: '▭', desc: '一块通用分区，选中后在右侧说明用途' },
+  { key: 'heading', label: '标题', icon: 'H', desc: '大号标题文字' },
+  { key: 'text', label: '文本占位', icon: '≡', desc: '一段占位说明文字，之后替换成正式内容' },
+  { key: 'image', label: '图片占位', icon: '🖼', desc: '图片位置，之后在「资源」里替换真实图片' },
+  { key: 'list', label: '列表占位', icon: '☰', desc: '带 3 条示例条目的列表骨架，说明条目数量与用途' },
+  { key: 'actions', label: '操作区', icon: '⏎', desc: '放主要操作按钮的横条，预置一个主按钮' },
+];
+
+function renderRegionPalette() {
+  const wrap = document.getElementById('pal-regions');
+  if (!wrap) return;
+  wrap.textContent = '';
+  for (const p of REGION_PRESETS) {
+    const b = document.createElement('button');
+    b.className = 'pal-item';
+    b.dataset.region = p.key;
+    b.title = p.desc;
+    b.innerHTML = `<span class="pal-ico">${p.icon}</span><span>${p.label}</span>`;
+    b.addEventListener('click', () => addRegion(p.key));
+    wrap.appendChild(b);
+  }
+}
+
+function addRegion(key) {
+  const target = insertionTarget();
+  const placed = { added: null };
+  mutate('添加起步区域', (doc) => {
+    const parent = doc.components[target];
+    const freeParent = state.freeMove && parent.layout.mode !== 'free';
+    let comp = null;
+    const mk = (type, extra) => newComponent(doc, type, target, extra);
+
+    if (key === 'region') {
+      comp = mk('container', { name: '区域', purpose: '区域：说明这块放什么内容' });
+    } else if (key === 'heading') {
+      comp = mk('text', { name: '标题', text: '标题', purpose: '页面或区块的标题' });
+      comp.style.fontSize = 22;
+      comp.style.fontWeight = 'bold';
+    } else if (key === 'text') {
+      comp = mk('text', { name: '文本占位', text: '这里是一段占位文字，之后替换成正式内容。', purpose: '文本占位：说明这段文字的用途' });
+    } else if (key === 'image') {
+      comp = mk('image', { name: '图片占位', purpose: '图片占位：之后替换成真实图片' });
+    } else if (key === 'list') {
+      comp = mk('container', { name: '列表', purpose: '列表占位：约 3–5 项，条目之后替换' });
+      for (let i = 1; i <= 3; i++) {
+        const item = newComponent(doc, 'text', comp.id, { name: `条目 ${i}`, text: `列表条目 ${i}`, purpose: '列表条目占位' });
+        item.size = { width: { mode: 'fill' }, height: { mode: 'auto' } };
+      }
+    } else if (key === 'actions') {
+      comp = mk('container', { name: '操作区', purpose: '操作区：放主要操作按钮', layoutMode: 'horizontal' });
+      comp.layout = { ...comp.layout, justify: 'end', align: 'center', padding: 8 };
+      const btn = newComponent(doc, 'button', comp.id, { name: '主操作', text: '主操作', purpose: '主要操作按钮' });
+      btn.size = { width: { mode: 'auto' }, height: { mode: 'auto' } };
+    }
+    if (!comp) return;
+
+    // 自由移动模式下落到画布的组件按绝对摆放（与基础组件行为一致）
+    if (freeParent) {
+      const dims = { container: [240, 160], text: [160, 40], image: [160, 120] }[comp.type] || [160, 48];
+      comp.placement = { mode: 'absolute' };
+      comp.position = { left: 24 + ((parent.children.length - 1) % 7) * 18, top: 24 + ((parent.children.length - 1) % 7) * 18 };
+      comp.size = { width: { mode: 'fixed', value: dims[0] }, height: { mode: 'fixed', value: dims[1] } };
+      delete comp.area;
+      for (const cid of comp.children || []) {
+        const child = doc.components[cid];
+        if (child && child.position) { child.position.left += 12; child.position.top += 12; }
+      }
+    }
+    placed.added = comp.id;
+    state.pendingSelect = comp.id;
+    state.lastAdded = comp.id;
+  });
+  if (placed.added && state.freeMove) {
+    // 提示一次落位规则：自由模式下需要拖到目标位置
+    toast('已添加；自由移动模式下可直接拖到想放的位置', 'info');
   }
 }
 
@@ -293,7 +376,7 @@ export function renderProperties() {
   if (shadowPatch) {
     const hint = document.createElement('div');
     hint.className = 'p-hint';
-    hint.textContent = '注意：当前变体对组件覆盖了样式（' + Object.keys(shadowPatch).join('、') + '）。' +
+    hint.textContent = '注意：当前方案对组件覆盖了样式（' + Object.keys(shadowPatch).join('、') + '）。' +
       '下方修改写入呈现方案基础样式，显示效果仍以变体覆盖为准（覆盖键请用 CLI/JSON 维护）。';
     secStyle.appendChild(hint);
   }
@@ -1043,7 +1126,7 @@ function v3BindingSection(comp) {
 
   const hint = document.createElement('div');
   hint.className = 'p-hint';
-  hint.textContent = '说明：画布上的位置/样式修改写入当前呈现方案，对所有使用它的变体生效；变体差异用「变体向导」与风格令牌表达。';
+  hint.textContent = '说明：画布上的位置/样式修改写入当前呈现，对所有使用它的方案生效；方案差异用「方案向导」与风格令牌表达。';
   sec.appendChild(hint);
   return sec;
 }
@@ -1262,10 +1345,38 @@ export function renderToolbarState() {
     nameEl.textContent = (state.doc && state.doc.name) || state.name || '（未打开）';
     nameEl.title = state.name ? '项目文件：' + state.name : '';
   }
-  const dirtyEl = document.getElementById('proj-dirty');
-  if (dirtyEl) dirtyEl.style.display = state.dirty ? '' : 'none';
-  const revEl = document.getElementById('proj-rev');
-  if (revEl) revEl.textContent = state.doc ? '修订号 ' + state.revision : '';
+  // 保存状态用明确文字（S2）：存在冲突 > 连接中断 > 保存中 > 未保存 > 已保存。
+  // 处理方法放在悬停提示里，不在顶栏堆错误码。
+  const statusEl = document.getElementById('proj-status');
+  if (statusEl) {
+    let txt = '';
+    let cls = 'proj-status';
+    let tip = '';
+    if (!state.doc) {
+      txt = '';
+    } else if (state.conflict) {
+      txt = '存在冲突';
+      cls += ' st-bad';
+      tip = '保存时发现项目在编辑器之外被先改过：请在冲突弹窗里选择「加载最新」或「强制保存」';
+    } else if (state.connDown) {
+      txt = '连接中断';
+      cls += ' st-bad';
+      tip = '与本地服务的连接断开，正在自动重连；重连前保存可能失败';
+    } else if (state.saving) {
+      txt = '保存中…';
+      cls += ' st-warn';
+    } else if (state.dirty) {
+      txt = '未保存';
+      cls += ' st-warn';
+      tip = '有未保存的修改，按 Ctrl+S 保存；直接关闭页面也会自动留存草稿';
+    } else {
+      txt = '已保存 · 修订号 ' + state.revision;
+      cls += ' st-ok';
+    }
+    statusEl.textContent = txt;
+    statusEl.className = cls;
+    statusEl.title = tip;
+  }
   const modeEl = document.getElementById('proj-mode');
   if (modeEl) {
     const m = state.doc ? (UI_MODES[state.doc.mode || DEFAULT_MODE] || UI_MODES.generic) : null;
