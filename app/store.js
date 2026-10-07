@@ -21,7 +21,8 @@ export const state = {
   dirty: false,       // 有未保存修改
   editSeq: 0,         // 编辑序号：任何修改/撤销/载入都会递增（保存会话归属判定，S1）
   draftUnavailable: null, // 草稿持久化失败原因（localStorage 容量不足等；null = 可用）
-  selection: null,    // 选中组件 id
+  selection: null,    // 主选中组件 id（属性面板/手柄跟随）
+  multiSelection: null, // 多选列表（含主选中；length>1 时有效，S2b）
   zoom: 1,
   snapEnabled: prefOn(PREF_SNAP, true),               // 吸附参考线（按住 Alt 临时绕过）
   freeMove: prefOn(PREF_FREE_MOVE, true),             // 组件自由移动（视图偏好，不进 UIDoc）
@@ -177,7 +178,7 @@ export function adoptExternal(doc) {
   state.dirty = false;
   state.editSeq++;
   computeView();
-  if (state.selection && !findComponent(scopeOf(doc), state.selection)) state.selection = null;
+  pruneSelection();
   ensureActivePage();
   coalesce = { key: null, time: 0 };
   emit({ reason: 'external' });
@@ -192,7 +193,7 @@ export function adoptDraft(doc) {
   state.dirty = true;
   state.editSeq++;
   computeView();
-  if (state.selection && !findComponent(scopeOf(doc), state.selection)) state.selection = null;
+  pruneSelection();
   ensureActivePage();
   coalesce = { key: null, time: 0 };
   scheduleDraftSave();
@@ -220,7 +221,7 @@ function applyMutation(label, fn, opts, scopeEdit) {
   state.editSeq++;
   computeView();
   state.dirty = true;
-  if (state.selection && !findComponent(scopeOf(next), state.selection)) state.selection = null;
+  if (state.selection && !findComponent(scopeOf(next), state.selection)) pruneSelection();
   ensureActivePage(); // 页面被删除/撤销时回落到起始页
   scheduleDraftSave(); // 草稿保护：稍后把未保存修改持久化（S1）
   emit({ reason: 'mutate', label, skipPanels: !!opts.skipPanels });
@@ -238,7 +239,7 @@ export function undo() {
   state.editSeq++;
   computeView();
   state.dirty = true;
-  if (state.selection && !findComponent(scopeOf(state.doc), state.selection)) state.selection = null;
+  pruneSelection();
   ensureActivePage();
   coalesce = { key: null, time: 0 };
   scheduleDraftSave();
@@ -254,7 +255,7 @@ export function redo() {
   state.editSeq++;
   computeView();
   state.dirty = true;
-  if (state.selection && !findComponent(scopeOf(state.doc), state.selection)) state.selection = null;
+  pruneSelection();
   ensureActivePage();
   coalesce = { key: null, time: 0 };
   scheduleDraftSave();
@@ -262,18 +263,30 @@ export function redo() {
 }
 
 // ---------- 普通状态 ----------
-export function select(id) {
-  if (state.selection === id) return;
+// 选中模型（S2b）：state.selection = 主选中（属性面板与缩放手柄跟随它）；
+// state.multiSelection = 多选列表（含主选中，length>1 时有效，首项即主选中）。
+export function selectedIds() {
+  const scope = state.doc ? scopeOf(state.doc) : null;
+  const comps = scope && scope.components ? scope.components : null;
+  if (!comps) return [];
+  if (state.multiSelection && state.multiSelection.length > 1) return state.multiSelection.filter((id) => comps[id]);
+  return state.selection && comps[state.selection] ? [state.selection] : [];
+}
+
+// 统一落选：去重、主选中=首项、页面跟随、祖先展开、撤销块记忆
+function applySelection(ids) {
   const prevPage = state.activePageId;
-  state.selection = id;
+  const list = (ids || []).filter((id, i, a) => id && a.indexOf(id) === i);
+  state.selection = list[0] || null;
+  state.multiSelection = list.length > 1 ? list : null;
   // 选点落在某个页面图层内（或就是页面）时，设计视图自动切到该页面（v3.1）
-  if (id) {
+  if (state.selection) {
     const scope = scopeOf(state.doc);
     let ownerPage = null;
-    const self = scope.components ? scope.components[id] : null;
-    if (self && self.page === true) ownerPage = id;
+    const self = scope.components ? scope.components[state.selection] : null;
+    if (self && self.page === true) ownerPage = state.selection;
     if (!ownerPage) {
-      for (const pid of ancestorsOf(scope, id)) {
+      for (const pid of ancestorsOf(scope, state.selection)) {
         const c = scope.components[pid];
         if (c && c.page === true) { ownerPage = pid; break; }
       }
@@ -281,10 +294,45 @@ export function select(id) {
     if (ownerPage) state.activePageId = ownerPage;
   }
   // 新选点若落在折叠的子树里，展开其祖先链，保证层级树中可见
-  if (id) for (const pid of ancestorsOf(scopeOf(state.doc), id)) state.collapsedTreeIds.delete(pid);
+  if (state.selection) for (const pid of ancestorsOf(scopeOf(state.doc), state.selection)) state.collapsedTreeIds.delete(pid);
   // 用户把选点移到别处后，"连续插入预设块"的平级追加记忆即失效
-  if (id !== state.lastBlockId) state.lastBlockId = null;
+  if (state.selection !== state.lastBlockId) state.lastBlockId = null;
   emit({ reason: 'select', pageChanged: state.activePageId !== prevPage });
+}
+
+export function select(id) {
+  if (state.selection === id && !state.multiSelection) return;
+  applySelection(id ? [id] : []);
+}
+
+// Shift+点击：加选 / 减选（多选，S2b）
+export function toggleSelected(id) {
+  if (!id) return;
+  const cur = selectedIds();
+  const i = cur.indexOf(id);
+  if (i >= 0) cur.splice(i, 1);
+  else cur.push(id);
+  applySelection(cur);
+}
+
+// 文档变化后清理失效的选中 id（主选中失效时用剩余项补位）
+export function pruneSelection() {
+  const scope = state.doc ? scopeOf(state.doc) : null;
+  const comps = scope && scope.components ? scope.components : {};
+  const alive = (state.multiSelection || []).filter((id) => comps[id]);
+  if (alive.length > 1) {
+    state.multiSelection = alive;
+    if (!comps[state.selection]) state.selection = alive[0];
+  } else {
+    state.multiSelection = null;
+    if (state.selection && !comps[state.selection]) state.selection = alive[0] || null;
+  }
+}
+
+// 删除等路径：清理选中并按选中语义刷新界面（面板/选中框）
+export function resyncSelection() {
+  pruneSelection();
+  emit({ reason: 'select' });
 }
 
 export function setZoom(z) {

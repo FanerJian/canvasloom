@@ -2,18 +2,19 @@
 // 面板：左侧（组件库 + 层级树）、右侧（属性面板）、模态框、提示
 // 属性面板中文标签与 shared/protocol.js 的字段定义同源。
 // ============================================================
-import { state, mutate, select, history, selectedComp, PALETTE_MIME, viewDoc, scopeOf, pagesOfDoc } from './store.js';
+import { state, mutate, select, toggleSelected, selectedIds, resyncSelection, history, selectedComp, PALETTE_MIME, viewDoc, scopeOf, pagesOfDoc } from './store.js';
 import {
   COMPONENT_TYPES, TYPE_IDS, LAYOUT_MODES, SIZE_MODES, LIMITS,
   JUSTIFY_OPTIONS, ALIGN_OPTIONS, STYLE_FIELDS, ID_PATTERN,
   V3_BIND_PATTERN, V3_ACTION_TYPES,
-  findComponent, isContainer, listContainers, normalizePadding,
+  findComponent, isContainer, listContainers, normalizePadding, isAbsolutePlacement,
   newComponent, cloneSubtree, genId, slugify, firstFreeGridCell, DEFAULT_MODE,
 } from '../shared/protocol.js';
 import { UI_MODES } from '../shared/modes.js';
 import { instantiateBlock } from '../shared/blocks.js';
 import { validateDoc } from '../shared/validate.js';
-import { designRectById, positionPreservingVisual } from './design-geometry.js';
+import { designRectById, positionPreservingVisual, parentContentOriginById } from './design-geometry.js';
+import { ALIGN_MODES, ALIGN_LABELS, planAlign, planDistribute, sharedParent } from './align.js';
 import { remapComponentRefs, cleanupDeletedRefs } from './v3edit.js';
 import { collectCopySnapshot, pasteSnapshotIntoDoc, duplicateSubtree, adaptChildToTargetLayout } from '../shared/clipboard.js';
 
@@ -238,7 +239,9 @@ export function renderTree() {
 
 function treeNode(comp, depth, pageSet) {
   const row = document.createElement('div');
-  row.className = 'tree-row' + (comp.id === state.selection ? ' active' : '');
+  const inSel = state.selection === comp.id;
+  const inMulti = !inSel && selectedIds().includes(comp.id);
+  row.className = 'tree-row' + (inSel ? ' active' : '') + (inMulti ? ' multi' : '');
   row.dataset.id = comp.id;
   row.draggable = true;
   row.style.paddingLeft = (8 + depth * 14) + 'px';
@@ -260,7 +263,7 @@ function treeNode(comp, depth, pageSet) {
       renderTree();
     });
   }
-  row.addEventListener('click', () => select(comp.id));
+  row.addEventListener('click', (e) => { if (e.shiftKey) toggleSelected(comp.id); else select(comp.id); });
   row.addEventListener('dragstart', (e) => {
     e.dataTransfer.setData('text/canvasloom-id', comp.id);
     e.dataTransfer.effectAllowed = 'move';
@@ -310,6 +313,11 @@ export function renderProperties() {
   const root = document.getElementById('props');
   const comp = selectedComp();
   root.textContent = '';
+  // 多选（S2b）：显示整组工具（对齐/等距/删除），单组件属性暂不展开
+  if (selectedIds().length > 1) {
+    root.appendChild(multiSection());
+    return;
+  }
   if (!comp) {
     root.appendChild(canvasSection());
     const empty = document.createElement('div');
@@ -722,6 +730,115 @@ export function reorder(id, index) {
   });
 }
 
+// ================= 多选工具（S2b）=================
+// 作用范围（首版）：同一父容器 + 独立摆放（自由布局或 placement absolute）。
+// 不满足时按钮禁用并给出适用范围说明；跨层级不做隐式重组。
+function multiSection() {
+  const ids = selectedIds();
+  const sec = section('多选（' + ids.length + ' 个）');
+  const view = viewDoc();
+  const comps = ids.map((id) => findComponent(view, id)).filter(Boolean);
+  const parentOf = (id) => { const c = findComponent(view, id); return c ? c.parent : null; };
+  const parentId = sharedParent(ids, parentOf);
+  const parent = parentId ? findComponent(view, parentId) : null;
+  const pmode = parent && parent.layout ? parent.layout.mode : null;
+  const independentlyPlaced = !!parent && (pmode === 'free' || comps.every((c) => isAbsolutePlacement(c, parent)));
+
+  const hint = document.createElement('div');
+  hint.className = 'p-hint';
+  hint.textContent = !parentId
+    ? '对齐与等距需选中同一父容器内的组件'
+    : (!independentlyPlaced ? '对齐与等距仅适用于独立摆放的组件（自由布局或「独立摆放」方式）' : '');
+  if (hint.textContent) sec._body.appendChild(hint);
+
+  const runAlign = (mode) => {
+    const origin = parentContentOriginById(parentId);
+    if (!origin) { toast('无法读取画布位置，已在当前布局内跳过', 'info'); return; }
+    const rects = comps.map((c) => {
+      const r = designRectById(c.id);
+      return r ? { id: c.id, x: r.x - origin.x, y: r.y - origin.y, w: r.w, h: r.h } : null;
+    }).filter(Boolean);
+    if (rects.length !== comps.length) { toast('部分组件不在当前页面，无法对齐', 'warn'); return; }
+    const plan = planAlign(rects, mode);
+    if (!plan.length) return;
+    mutate(`对齐 ${plan.length} 个组件（${ALIGN_LABELS[mode]}）`, (doc) => {
+      for (const p of plan) {
+        const c = doc.components[p.id];
+        if (!c) continue;
+        if (!c.placement && pmode !== 'free') c.placement = { mode: 'absolute' };
+        c.position = { left: Math.round(p.x), top: Math.round(p.y) };
+      }
+    });
+  };
+  const runDistribute = (axis) => {
+    const origin = parentContentOriginById(parentId);
+    if (!origin) { toast('无法读取画布位置，已在当前布局内跳过', 'info'); return; }
+    const rects = comps.map((c) => {
+      const r = designRectById(c.id);
+      return r ? { id: c.id, x: r.x - origin.x, y: r.y - origin.y, w: r.w, h: r.h } : null;
+    }).filter(Boolean);
+    if (rects.length !== comps.length) { toast('部分组件不在当前页面，无法等距分布', 'warn'); return; }
+    const plan = planDistribute(rects, axis);
+    if (!plan.length) return;
+    mutate(`${axis === 'v' ? '垂直' : '水平'}等距 ${plan.length} 个组件`, (doc) => {
+      for (const p of plan) {
+        const c = doc.components[p.id];
+        if (!c) continue;
+        if (!c.placement && pmode !== 'free') c.placement = { mode: 'absolute' };
+        c.position = { left: Math.round(p.x), top: Math.round(p.y) };
+      }
+    });
+  };
+
+  const grid = document.createElement('div');
+  grid.className = 'p-align-grid';
+  const mkBtn = (label, disabled, fn, title) => {
+    const b = document.createElement('button');
+    b.className = 'p-btn';
+    b.textContent = label;
+    b.disabled = !!disabled;
+    if (title) b.title = title;
+    b.addEventListener('click', fn);
+    return b;
+  };
+  for (const mode of ALIGN_MODES) {
+    grid.appendChild(mkBtn(ALIGN_LABELS[mode], !parentId || !independentlyPlaced, () => runAlign(mode)));
+  }
+  const canDistribute = !!parentId && independentlyPlaced && ids.length >= 3;
+  grid.appendChild(mkBtn('水平等距', !canDistribute, () => runDistribute('h'),
+    ids.length < 3 ? '等距分布需至少 3 个组件' : ''));
+  grid.appendChild(mkBtn('垂直等距', !canDistribute, () => runDistribute('v'),
+    ids.length < 3 ? '等距分布需至少 3 个组件' : ''));
+  sec._body.appendChild(grid);
+
+  sec._body.appendChild(rowButtons('', [
+    ['🗑 删除选中（' + ids.length + ' 个）', () => deleteComponents(ids), false],
+  ], 'danger'));
+  return sec;
+}
+
+// 删除多个组件：一次 mutate = 一条撤销记录（S2b）
+export function deleteComponents(ids) {
+  const list = (ids || []).filter((id) => id && id !== 'root');
+  if (!list.length) return;
+  if (list.length === 1) { deleteComponent(list[0]); return; }
+  mutate(`删除 ${list.length} 个组件`, (doc) => {
+    const removed = [];
+    const rm = (cid) => {
+      const cc = doc.components[cid];
+      if (!cc) return;
+      removed.push(cid);
+      if (cc.children) for (const k of [...cc.children]) rm(k);
+      if (cc.parent && doc.components[cc.parent]) doc.components[cc.parent].children = doc.components[cc.parent].children.filter((x) => x !== cid);
+      delete doc.components[cid];
+    };
+    for (const id of list) rm(id);
+    if (doc.version === 3) cleanupDeletedRefs(doc, doc.__presentationId, removed);
+  });
+  toast('已删除 ' + list.length + ' 个组件');
+  resyncSelection();
+}
+
 // 删除不再弹原生 confirm：靠撤销历史兜底，操作更顺手
 export function deleteComponent(id) {
   const c = findComponent(viewDoc(), id);
@@ -742,6 +859,7 @@ export function deleteComponent(id) {
     if (doc.version === 3) cleanupDeletedRefs(doc, doc.__presentationId, removed);
   });
   toast(`已删除「${label}」`);
+  resyncSelection(); // 多选时清理失效选中（S2b）
 }
 
 // 创建副本（供右键菜单与 Ctrl+D 使用）
@@ -1393,8 +1511,10 @@ export function renderToolbarState() {
   }
   const selEl = document.getElementById('status-sel');
   if (selEl) {
+    const ids = selectedIds();
     const c = selectedComp();
-    selEl.textContent = c ? `选中：${c.name}` : '未选中组件';
+    if (ids.length > 1) selEl.textContent = `已选 ${ids.length} 个组件`;
+    else selEl.textContent = c ? `选中：${c.name}` : '未选中组件';
   }
   const segDesign = document.getElementById('btn-mode-design');
   const segPreview = document.getElementById('btn-mode-preview');

@@ -187,6 +187,7 @@ body.hide-right #right { margin-right: calc(var(--right-w) * -1); }
 }
 .tree-row:hover { background: var(--surface-2); color: var(--text); }
 .tree-row.active { background: var(--accent-soft); color: var(--accent-strong); }
+.tree-row.multi { background: var(--accent-soft); color: var(--accent-strong); opacity: .75; }
 .tree-row.drop-target { outline: 2px dashed var(--accent); outline-offset: -2px; }
 .tree-caret { width: 10px; color: var(--text-3); font-size: 10px; flex: none; }
 .tree-caret.tog {
@@ -249,6 +250,8 @@ body.hide-right #right { margin-right: calc(var(--right-w) * -1); }
 
 /* 选中框 / 手柄 / 参考线 */
 .ui-selbox { position: absolute; outline: 1.5px solid var(--accent); outline-offset: 0; pointer-events: none; }
+/* 多选：非主选中项虚线框（S2b） */
+.ui-selbox-multi { outline: 1.5px dashed var(--accent); opacity: .7; }
 .ui-badge {
   position: absolute; pointer-events: none;
   background: var(--accent); color: #fff; font-size: 11px; line-height: 1;
@@ -407,6 +410,8 @@ input[type="color"].p-input { padding: 2px 3px; height: 29px; flex: none; width:
 .p-btn.danger { color: var(--danger); border-color: #f4c7c3; }
 .p-btn.danger:hover:not(:disabled) { border-color: var(--danger); background: var(--danger-soft); color: var(--danger); }
 .p-btnrow { flex-wrap: wrap; }
+/* 多选对齐按钮网格（S2b） */
+.p-align-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 4px 0; }
 .p-btn-mini { height: 24px; padding: 0 8px; font-size: 12px; }
 .p-hint { color: var(--text-3); font-size: 11px; line-height: 1.7; }
 .p-tracks { flex-direction: column; align-items: stretch; }

@@ -1,13 +1,13 @@
 // ============================================================
 // 编辑器入口：装配、工具栏、快捷键、保存与外部修改协同
 // ============================================================
-import { state, on, select, undo, redo, loadProject, adoptExternal, adoptDraft, pushUndoEntry, selectedComp, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas, viewDoc, pagesOfDoc, setActivePage, addPage, mutateDoc, saveDraftNow, scheduleDraftSave, clearDraft, loadDraft } from './store.js';
+import { state, on, select, undo, redo, loadProject, adoptExternal, adoptDraft, pushUndoEntry, selectedComp, selectedIds, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas, viewDoc, pagesOfDoc, setActivePage, addPage, mutateDoc, saveDraftNow, scheduleDraftSave, clearDraft, loadDraft } from './store.js';
 import { UI_MODES } from '../shared/modes.js';
 import { TEMPLATES, DEFAULT_TEMPLATE } from '../shared/templates.js';
 import { LIMITS } from '../shared/protocol.js';
 import { validateDoc } from '../shared/validate.js';
 import { initCanvas, renderCanvas, refreshOverlay, fitZoom, nudge } from './canvas.js';
-import { renderPalette, renderBlocks, renderTree, renderProperties, renderToolbarState, openModal, closeModal, toast, copySelection, pasteClipboard, deleteComponent, duplicateComponent } from './panels.js';
+import { renderPalette, renderBlocks, renderTree, renderProperties, renderToolbarState, openModal, closeModal, toast, copySelection, pasteClipboard, deleteComponent, deleteComponents, duplicateComponent } from './panels.js';
 import { renderFeaturesPanel, openVariantWizard, switchVariant } from './v3panels.js';
 import { initPreviewBar, renderPreviewPane, runCheck, runExport } from './preview.js';
 import { listProjects, getProject, createProject, saveProject, connectEvents } from './api.js';
@@ -385,11 +385,12 @@ function connect() {
 }
 
 // ---------- 复制/删除 ----------
-// 删除不再弹 confirm：撤销历史兜底，操作更顺手
+// 删除不再弹 confirm：撤销历史兜底，操作更顺手；多选一次删除全部选中项（S2b）
 function deleteSelection() {
-  const c = selectedComp();
-  if (!c || c.id === 'root') return;
-  deleteComponent(c.id);
+  const ids = selectedIds().filter((id) => id !== 'root');
+  if (!ids.length) return;
+  if (ids.length === 1) deleteComponent(ids[0]);
+  else deleteComponents(ids);
 }
 
 // ---------- 快捷键 ----------
@@ -427,6 +428,7 @@ function showShortcuts() {
     ['双击组件', '就地编辑文字'], ['右键组件', '常用操作菜单'],
     ['Ctrl+S', '保存'], ['Ctrl+Z / Ctrl+Y', '撤销 / 重做'],
     ['Ctrl+C / Ctrl+V', '复制 / 粘贴'], ['Ctrl+D', '创建副本'],
+    ['Shift+点击', '加选 / 减选（多选）'],
     ['Delete', '删除选中组件'], ['方向键', '微调位置 / 顺序 / 占格'],
     ['Shift + 方向键', '大幅微调（10px）'], ['Ctrl+滚轮', '以光标为中心缩放'],
     ['Esc', '取消选中 / 关闭弹窗'],

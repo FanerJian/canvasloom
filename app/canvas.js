@@ -4,7 +4,7 @@
 // 缩放手柄改尺寸：fill 轴拖后转固定、percent 轴按新比例重算（网格父容器中调跨格数）。
 // 画布通过 transform:scale 缩放，所有指针位移按 1/zoom 换算为设计坐标。
 // ============================================================
-import { state, mutate, select, setZoom, setSnapEnabled, PALETTE_MIME, viewDoc, pagesOfDoc } from './store.js';
+import { state, mutate, select, toggleSelected, selectedIds, setZoom, setSnapEnabled, PALETTE_MIME, viewDoc, pagesOfDoc } from './store.js';
 import {
   findComponent, isContainer, normalizePadding, LIMITS, isAbsolutePlacement,
   COMPONENT_TYPES, defaultSizeFor, firstFreeGridCell, newComponent,
@@ -149,6 +149,19 @@ export function refreshOverlay() {
   ov.textContent = '';
   const id = state.selection;
   if (!id || !state.doc || !state.view) return;
+  // 多选：先给非主选中项画虚线框（无手柄），主选中保持原样（S2b）
+  const ids = selectedIds();
+  if (ids.length > 1) {
+    for (const sid of ids) {
+      if (sid === id) continue;
+      const snode = el.artboard.querySelector(`[data-id="${CSS.escape(sid)}"]`);
+      if (!snode) continue;
+      const sr = nodeRect(snode);
+      const mbox = mk('div', 'ui-selbox ui-selbox-multi');
+      mbox.style.cssText = `left:${sr.x}px;top:${sr.y}px;width:${sr.w}px;height:${sr.h}px;`;
+      ov.appendChild(mbox);
+    }
+  }
   const comp = findComponent(viewDoc(), id);
   const node = el.artboard.querySelector(`[data-id="${CSS.escape(id)}"]`);
   if (!comp || !node) return;
@@ -194,7 +207,9 @@ function onPointerDown(e) {
   const node = e.target.closest('#artboard [data-id]');
   if (handle) { startResize(e, handle.dataset.dir); return; }
   if (node) {
-    if (node.dataset.id !== state.selection) select(node.dataset.id);
+    if (e.shiftKey) { toggleSelected(node.dataset.id); return; } // Shift+点击：加选/减选（S2b）
+    // 点击多选成员（无论是否主选中）保留整组，供整组拖动；未拖动时在 onDragUp 收敛单选
+    if (node.dataset.id !== state.selection && !selectedIds().includes(node.dataset.id)) select(node.dataset.id);
     startDrag(e, node);
   } else if (e.target === el.artboard) {
     select(null);
@@ -516,10 +531,42 @@ function startDrag(e, node) {
   const pmode = parent && parent.layout ? parent.layout.mode : null;
   const free = !!parent && (state.freeMove || isAbsolutePlacement(comp, parent));
   const rect = nodeRect(node);
+  // 整组移动（S2b）：全部选中项同父容器且均为独立摆放（自由布局或 placement absolute）
+  // 时，拖动任一选中项带动整组；不满足时仅移动当前项并提示适用范围。
+  const selIds = selectedIds();
+  const multiMember = selIds.length > 1 && selIds.includes(comp.id);
+  let group = null;
+  let groupHint = false;
+  if (multiMember) {
+    const allIndependentlyPlaced = pmode === 'free' || selIds.every((cid) => {
+      const c = findComponent(doc, cid);
+      return c && c.parent === comp.parent && isAbsolutePlacement(c, parent);
+    });
+    const sameParent = selIds.every((cid) => {
+      const c = findComponent(doc, cid);
+      return c && c.parent === comp.parent;
+    });
+    if (sameParent && allIndependentlyPlaced) {
+      group = selIds.map((cid) => {
+        const c = findComponent(doc, cid);
+        const gnode = el.artboard.querySelector(`[data-id="${CSS.escape(cid)}"]`);
+        return gnode ? {
+          id: cid, node: gnode,
+          styleLeft: parseFloat(gnode.style.left) || 0,
+          styleTop: parseFloat(gnode.style.top) || 0,
+          origPos: c.position ? { ...c.position } : { left: 0, top: 0 },
+        } : null;
+      }).filter(Boolean);
+      if (group.length < 2) group = null;
+    } else {
+      groupHint = true; // 仅移动当前项：多选整组移动要求同一父容器、均独立摆放
+    }
+  }
   drag = {
     kind: 'move', node, comp, parent, pmode,
     id: comp.id, sx: e.clientX, sy: e.clientY, moved: false, free,
     origRect: rect, originalStyle: node.getAttribute('style'),
+    group, groupHint, multiMember,
     orig: {
       position: comp.position ? { ...comp.position } : null,
       area: comp.area ? { ...comp.area } : null,
@@ -640,13 +687,38 @@ function moveFree(e, dx, dy) {
   const top = targetY - (pr.y - pad[0]);
   node.style.left = left + 'px';
   node.style.top = top + 'px';
+  // 整组移动：其余选中项跟随同一设计坐标位移（S2b）
+  if (drag.group) {
+    const ddx = targetX - drag.origRect.x;
+    const ddy = targetY - drag.origRect.y;
+    for (const g of drag.group) {
+      if (g.id === drag.id) continue;
+      g.node.style.left = (g.styleLeft + ddx) + 'px';
+      g.node.style.top = (g.styleTop + ddy) + 'px';
+    }
+  }
   refreshOverlayRect(node);
   drawFreeGuides(snapV, snapH, drag.parent, drag.node, targetX, targetY, w, h);
 }
 function refreshOverlayRect(node) {
   const r = nodeRect(node);
-  const box = el.overlay.querySelector('.ui-selbox');
+  // 主选中框（多选框带 ui-selbox-multi，勿混指）
+  const box = el.overlay.querySelector('.ui-selbox:not(.ui-selbox-multi)');
   if (box) box.style.cssText = `left:${r.x}px;top:${r.y}px;width:${r.w}px;height:${r.h}px;`;
+  // 整组移动/多选时同步其余选中框
+  const boxes = el.overlay.querySelectorAll('.ui-selbox-multi');
+  if (boxes.length) {
+    let i = 0;
+    for (const sid of selectedIds()) {
+      if (sid === state.selection) continue;
+      const b = boxes[i++];
+      if (!b) break;
+      const snode = el.artboard.querySelector(`[data-id="${CSS.escape(sid)}"]`);
+      if (!snode) continue;
+      const sr = nodeRect(snode);
+      b.style.cssText = `left:${sr.x}px;top:${sr.y}px;width:${sr.w}px;height:${sr.h}px;`;
+    }
+  }
 }
 function drawFreeGuides(snapV, snapH, parentComp, node, left, top, w, h) {
   const ov = el.overlay;
@@ -759,16 +831,28 @@ function onDragUp(e) {
   const d = drag;
   drag = null;
   if (!d) return;
-  if (!d.moved) { cleanupDragDom(d); return; }
+  if (!d.moved) {
+    // 多选状态下单击某一选中项（未拖动）：收敛为单选该项（S2b）
+    if (d.multiMember) select(d.id);
+    cleanupDragDom(d);
+    return;
+  }
   const name = d.comp.name || d.id;
+  const groupIds = d.group ? d.group.map((g) => g.id) : null;
+  const groupLabel = groupIds ? `移动 ${groupIds.length} 个组件` : `移动 ${name}`;
   if (d.free && d.pmode !== 'free') {
     const pad = freePadOf(d.parent);
     const left = Math.round((parseFloat(d.node.style.left) || 0) - pad[3]);
     const top = Math.round((parseFloat(d.node.style.top) || 0) - pad[0]);
     const width = Math.max(1, Math.round(d.origRect.w));
     const height = Math.max(1, Math.round(d.origRect.h));
-    if (!d.comp.placement || d.comp.placement.mode !== 'absolute' || left !== d.orig.position.left || top !== d.orig.position.top) {
-      mutate(`移动 ${name}`, (doc) => {
+    const movedMembers = d.group ? d.group.filter((g) => {
+      const gLeft = Math.round((parseFloat(g.node.style.left) || 0) - pad[3]);
+      const gTop = Math.round((parseFloat(g.node.style.top) || 0) - pad[0]);
+      return gLeft !== g.origPos.left || gTop !== g.origPos.top;
+    }) : [];
+    if (!d.comp.placement || d.comp.placement.mode !== 'absolute' || left !== d.orig.position.left || top !== d.orig.position.top || movedMembers.length) {
+      mutate(groupLabel, (doc) => {
         const c = doc.components[d.id];
         c.placement = { mode: 'absolute' };
         c.position = { left, top };
@@ -776,10 +860,26 @@ function onDragUp(e) {
         if (!d.comp.placement || d.comp.placement.mode !== 'absolute') {
           for (const axis of ['width', 'height']) c.size[axis] = { mode: 'fixed', value: axis === 'width' ? width : height };
         }
+        // 整组移动：同名写入其余选中项的独立位置（S2b）
+        for (const g of d.group || []) {
+          if (g.id === d.id) continue;
+          const gc = doc.components[g.id];
+          if (!gc) continue;
+          gc.placement = { mode: 'absolute' };
+          gc.position = {
+            left: Math.round((parseFloat(g.node.style.left) || 0) - pad[3]),
+            top: Math.round((parseFloat(g.node.style.top) || 0) - pad[0]),
+          };
+        }
       });
     } else {
       if (d.originalStyle == null) d.node.removeAttribute('style');
       else d.node.setAttribute('style', d.originalStyle);
+      for (const g of d.group || []) {
+        if (g.id === d.id) continue;
+        g.node.style.left = g.styleLeft + 'px';
+        g.node.style.top = g.styleTop + 'px';
+      }
       refreshOverlay();
     }
   } else if (d.pmode === 'free') {
@@ -788,8 +888,17 @@ function onDragUp(e) {
     const left = Math.round(parseFloat(d.node.style.left) || 0) - pad[3];
     const top = Math.round(parseFloat(d.node.style.top) || 0) - pad[0];
     if (left !== orig.left || top !== orig.top) {
-      mutate(`移动 ${name}`, (doc) => {
+      mutate(groupLabel, (doc) => {
         doc.components[d.id].position = { left, top };
+        for (const g of d.group || []) {
+          if (g.id === d.id) continue;
+          const gc = doc.components[g.id];
+          if (!gc) continue;
+          gc.position = {
+            left: Math.round((parseFloat(g.node.style.left) || 0) - pad[3]),
+            top: Math.round((parseFloat(g.node.style.top) || 0) - pad[0]),
+          };
+        }
       });
     }
   } else if (d.pmode === 'grid') {
@@ -815,6 +924,8 @@ function onDragUp(e) {
     if (d.originalStyle == null) d.node.removeAttribute('style');
     else d.node.setAttribute('style', d.originalStyle);
   }
+  // 多选但不满足整组移动条件：说明适用范围（S2b，只提示一次）
+  if (d.groupHint) toast('整组移动需同一父容器的独立摆放组件', 'info');
   cleanupDragDom(d);
   refreshOverlay();
 }
@@ -827,6 +938,12 @@ function onDragCancel() {
   const d = drag; drag = null;
   if (d.originalStyle == null) d.node.removeAttribute('style');
   else d.node.setAttribute('style', d.originalStyle);
+  // 取消整组拖动：其余成员位置样式同样回滚
+  for (const g of d.group || []) {
+    if (g.id === d.id) continue;
+    g.node.style.left = g.styleLeft + 'px';
+    g.node.style.top = g.styleTop + 'px';
+  }
   cleanupDragDom(d);
   refreshOverlay();
 }
