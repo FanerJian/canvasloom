@@ -40,7 +40,7 @@ window.addEventListener('error', (e) => {
   if (now - lastErrToast < 4000) return;
   lastErrToast = now;
   try {
-    toast(`页面脚本异常（${(e.message || '未知错误').slice(0, 60)}），建议按 Ctrl+F5 强制刷新`, 'bad');
+    toast(`脚本异常，请按 Ctrl+F5 刷新`, 'bad');
   } catch { /* 模块未就绪时忽略 */ }
 });
 
@@ -114,7 +114,7 @@ async function openProjectByName(name, { silent, checkDraft } = {}) {
   }
   loadProject(name, doc);
   localStorage.setItem('canvasloom:last', name);
-  if (!silent) toast(`已打开「${(doc && doc.name) || name}」（修订号 ${doc.revision}）`, 'ok');
+  if (!silent) toast(`已打开「${(doc && doc.name) || name}」`, 'ok');
   if (checkDraft) maybeOfferDraftRecovery();
   return true;
 }
@@ -125,11 +125,11 @@ async function openProjectByName(name, { silent, checkDraft } = {}) {
 function guardSwitchProject(proceed) {
   if (!state.dirty) { proceed(); return; }
   const draftNote = state.draftUnavailable
-    ? `<br><strong class="ri-msg" style="color:#b45309">注意：自动草稿不可用（${escapeHtml(state.draftUnavailable)}），"保留草稿"可能失败，建议直接保存。</strong>`
+    ? `<br><strong class="ri-msg" style="color:#b45309">自动草稿不可用（${escapeHtml(state.draftUnavailable)}），建议先保存。</strong>`
     : '';
   const box = document.createElement('div');
   box.className = 'p-hint';
-  box.innerHTML = `当前项目「${escapeHtml((state.doc && state.doc.name) || state.name || '')}」有<strong>未保存的修改</strong>。切换前请选择如何处理：${draftNote}`;
+  box.innerHTML = `项目「${escapeHtml((state.doc && state.doc.name) || state.name || '')}」存在未保存的修改，请选择处理方式：${draftNote}`;
   openModal('未保存的修改', box, [
     ['保存并继续', async () => {
       await save();
@@ -139,8 +139,8 @@ function guardSwitchProject(proceed) {
     ['保留草稿并继续', () => {
       const ok = saveDraftNow();
       closeModal();
-      if (!ok) toast('草稿未能保留（' + (state.draftUnavailable || '未知原因') + '），已按原样切换', 'warn');
-      else toast('未保存修改已保留为草稿，下次打开该项目时可找回', 'ok');
+      if (!ok) toast('草稿保留失败：' + (state.draftUnavailable || '未知原因'), 'warn');
+      else toast('已保留草稿', 'ok');
       proceed();
     }],
     ['放弃修改并继续', () => { clearDraft(); closeModal(); proceed(); }],
@@ -159,10 +159,10 @@ function maybeOfferDraftRecovery() {
   box.className = 'p-hint';
   box.innerHTML = `发现项目「${escapeHtml((d.doc && d.doc.name) || state.name)}」的未保存草稿` +
     `（保存于 ${d.savedAt ? escapeHtml(new Date(d.savedAt).toLocaleString()) : '未知时间'}，基于修订号 ${d.baseRevision ?? '?'}）。` +
-    (stale ? `<br><strong>注意：</strong>磁盘文件已更新到修订号 ${state.revision}；恢复后保存时会按修订号冲突处理，不会静默覆盖外部修改。` : '') +
-    '<br><br>恢复草稿：未保存修改回到画布（Ctrl+Z 可回到磁盘版本）。丢弃草稿：以磁盘内容为准。';
-  openModal('找回未保存的草稿', box, [
-    ['恢复草稿', () => { closeModal(); adoptDraft(d.doc); clearDraft(); toast('已恢复未保存草稿；Ctrl+Z 可回到磁盘版本', 'ok'); }],
+    (stale ? `<br><strong>注意：</strong>磁盘文件已更新至修订号 ${state.revision}，恢复后保存将进入冲突流程。` : '') +
+    '<br><br>恢复后未保存内容回到画布；丢弃则以磁盘内容为准。';
+  openModal('未保存草稿', box, [
+    ['恢复草稿', () => { closeModal(); adoptDraft(d.doc); clearDraft(); toast('已恢复草稿', 'ok'); }],
     ['丢弃草稿', () => { clearDraft(); closeModal(); }],
   ]);
 }
@@ -181,15 +181,15 @@ async function reloadLatestFromDisk() {
     pushUndoEntry({ doc: state.doc, label: '加载最新前（未保存修改）', revision: state.revision });
   }
   loadProject(state.name, doc, { keepHistory: true });
-  if (hadDirty) toast('已加载最新版本；之前的未保存修改可 Ctrl+Z 找回（本次会话内）', 'ok');
-  else toast('已加载最新版本', 'ok');
+  if (hadDirty) toast('已加载最新，原内容可撤销', 'ok');
+  else toast('已加载最新', 'ok');
 }
 
 async function showOpenDialog() {
   const projects = await listProjects();
   const box = document.createElement('div');
   box.className = 'open-list';
-  if (!projects.length) box.innerHTML = '<div class="p-hint">还没有项目，点击"新建"创建一个。</div>';
+  if (!projects.length) box.innerHTML = '<div class="p-hint">暂无项目</div>';
   for (const p of projects) {
     const row = document.createElement('button');
     row.className = 'open-item';
@@ -212,7 +212,7 @@ async function showNewDialog() {
   box.className = 'new-box';
   const modeLabel = document.createElement('div');
   modeLabel.className = 'p-label new-label';
-  modeLabel.textContent = '选择界面模式（决定画布尺寸、新组件默认样式与预设块）';
+  modeLabel.textContent = '界面模式';
   box.appendChild(modeLabel);
   const grid = document.createElement('div');
   grid.className = 'mode-grid';
@@ -234,7 +234,7 @@ async function showNewDialog() {
   let chosenTemplate = DEFAULT_TEMPLATE;
   const tplLabel = document.createElement('div');
   tplLabel.className = 'p-label new-label';
-  tplLabel.textContent = '起步模板（区域和用途已标好，内容之后自己填）';
+  tplLabel.textContent = '起步模板';
   box.appendChild(tplLabel);
   const tplGrid = document.createElement('div');
   tplGrid.className = 'mode-grid';
@@ -253,13 +253,13 @@ async function showNewDialog() {
   box.appendChild(tplGrid);
   const layoutLabel = document.createElement('div');
   layoutLabel.className = 'p-label new-label';
-  layoutLabel.textContent = '起步方式（之后随时可在右侧面板切换）';
+  layoutLabel.textContent = '起步方式';
   box.appendChild(layoutLabel);
   const layoutRow = document.createElement('div');
   layoutRow.className = 'mode-grid';
   const LAYOUT_CHOICES = [
-    ['free', '✥ 自由摆放', '元素按坐标随意摆放，适合海报、面板、自由构图（推荐）'],
-    ['vertical', '⬓ 自动排列', '元素按顺序自动排列，适合表单、列表类页面'],
+    ['free', '✥ 自由摆放', '按坐标自由摆放（推荐）'],
+    ['vertical', '⬓ 自动排列', '按顺序自动排列'],
   ];
   for (const [id, label, desc] of LAYOUT_CHOICES) {
     const card = document.createElement('button');
@@ -276,7 +276,7 @@ async function showNewDialog() {
   box.appendChild(layoutRow);
   const nameLabel = document.createElement('div');
   nameLabel.className = 'p-label new-label';
-  nameLabel.textContent = '项目名（可中文）';
+  nameLabel.textContent = '项目名称';
   box.appendChild(nameLabel);
   const input = document.createElement('input');
   input.className = 'p-input';
@@ -293,7 +293,7 @@ async function showNewDialog() {
         closeModal(); // 未脏路径下守卫不弹窗，这里负责关掉新建弹窗
         loadProject(name, r.doc);
         localStorage.setItem('canvasloom:last', name);
-        toast(`已创建「${name}」（${UI_MODES[chosen].label} · ${TEMPLATES[chosenTemplate].label}）`, 'ok');
+        toast(`已创建「${name}」`, 'ok');
       });
     }],
   ]);
@@ -322,7 +322,7 @@ async function save({ force } = {}) {
         row.innerHTML = `<span class="ri-badge">错误</span><span class="ri-code">${e.code}</span><span class="ri-msg">${e.message}</span>`;
         box.appendChild(row);
       }
-      openModal('无法保存：文档存在结构错误', box, [['知道了', () => closeModal()]]);
+      openModal('无法保存', box, [['关闭', () => closeModal()]]);
       return;
     }
     const base = force ? (state._serverRevision ?? state.revision) : state.revision;
@@ -334,11 +334,11 @@ async function save({ force } = {}) {
       if (sameSession) {
         state.dirty = false;
         clearDraft();
-        toast(`已保存（修订号 ${r.revision}）`, 'ok');
+        toast('已保存', 'ok');
       } else {
         // 保存期间又有修改（或已切走）：磁盘内容是新修订号，但画布仍是未保存状态
         scheduleDraftSave();
-        if (state.name === session.name) toast(`已写入修订号 ${r.revision}；保存期间又有新的修改，当前内容仍为未保存`, 'info');
+        if (state.name === session.name) toast('已保存；期间产生新的修改，仍为未保存', 'info');
       }
       renderToolbarState();
       return;
@@ -348,7 +348,7 @@ async function save({ force } = {}) {
       state.conflict = true; // 顶栏状态显示「存在冲突」，处理完成后随加载/保存清除
       renderToolbarState();
       const box = document.createElement('div');
-      box.innerHTML = `<div class="p-hint">文件在编辑器之外被修改（agent 或 CLI）。<br>服务器当前修订号：<strong>${r.currentRevision}</strong>，本次保存基于：<strong>${base}</strong>。<br><br>建议"加载最新"以免覆盖（当前未保存内容会保留为可撤销记录，Ctrl+Z 找回）；选择"强制保存"将以当前画布内容覆盖外部修改（可撤销）。</div>`;
+      box.innerHTML = `<div class="p-hint">项目已在编辑器之外更新：服务器修订号 <strong>${r.currentRevision}</strong>，本次保存基于 <strong>${base}</strong>。<br><br>「加载最新」保留外部修改，当前内容转为撤销记录；「强制保存」以当前内容覆盖。</div>`;
       openModal('修订号冲突', box, [
         ['加载最新', async () => { state.conflict = false; closeModal(); await reloadLatestFromDisk(); }],
         ['强制保存', async () => { state.conflict = false; closeModal(); await save({ force: true }); }, 'danger'],
@@ -371,14 +371,14 @@ function connect() {
       if (!r.ok) return;
       if (state.dirty) {
         const box = document.createElement('div');
-        box.innerHTML = `<div class="p-hint">文件被外部修改（新修订号 ${r.doc.revision}），但当前画布有未保存修改。<br><br>保留我的修改：不做任何变更；加载最新：载入外部版本，当前未保存内容会保留为一条撤销记录（Ctrl+Z 找回，本次会话内有效）。</div>`;
+        box.innerHTML = `<div class="p-hint">项目已被外部修改（修订号 ${r.doc.revision}），当前存在未保存修改。<br><br>「加载最新」将载入外部版本，当前内容转为撤销记录。</div>`;
         openModal('外部修改', box, [
           ['保留我的修改', () => { state._serverRevision = r.doc.revision; closeModal(); }],
           ['加载最新', async () => { closeModal(); await reloadLatestFromDisk(); }],
         ]);
       } else {
         adoptExternal(adoptDocForSession(r.doc));
-        toast('设计已被外部修改（agent/CLI），已自动刷新；可撤销', 'info');
+        toast('项目已被外部修改，已自动刷新，可撤销', 'info');
       }
     }
   }, (down) => { state.connDown = down; renderToolbarState(); });
@@ -439,7 +439,7 @@ function showShortcuts() {
     row.innerHTML = `<span>${desc}</span><kbd>${keys}</kbd>`;
     box.appendChild(row);
   }
-  openModal('键盘快捷键', box, [['知道了', () => closeModal()]]);
+  openModal('快捷键', box, [['关闭', () => closeModal()]]);
 }
 
 // ---------- 面板开合记忆（localStorage；首次无存档默认两侧展开，新手能直接看到带文字的工具入口；之后按偏好记忆） ----------
@@ -491,7 +491,7 @@ function renderVariantMenu() {
   menu.appendChild(sep);
   const add = document.createElement('button');
   add.className = 'tb-btn';
-  add.textContent = '＋ 新建方案（向导）…';
+  add.textContent = '＋ 新建方案';
   add.addEventListener('click', () => { closeMenus(); openVariantWizard(); });
   menu.appendChild(add);
 }
@@ -516,7 +516,7 @@ function renderPageMenu() {
   if (!pages.length) {
     const hint = document.createElement('div');
     hint.className = 'p-hint tb-menu-hint';
-    hint.textContent = '页面是铺满画布的图层；给按钮配「goto 跳转页面」动作即可切换页面。';
+    hint.textContent = '页面为铺满画布的图层，可由按钮动作切换。';
     menu.appendChild(hint);
   }
   for (const pid of pages) {
@@ -533,11 +533,11 @@ function renderPageMenu() {
   }
   const add = document.createElement('button');
   add.className = 'tb-btn';
-  add.textContent = '＋ 新建页面（图层）';
+  add.textContent = '＋ 新建页面';
   add.addEventListener('click', () => {
     closeMenus();
     const id = addPage(`页面 ${pages.length + 1}`);
-    if (id) toast('已新建页面，画布已切换到它；在「功能与交互」里给按钮配 goto 动作可跳到这页', 'ok');
+    if (id) toast('已新建页面', 'ok');
   });
   menu.appendChild(add);
 }
@@ -553,10 +553,8 @@ function showUpgradeDialog() {
   if (!state.doc || state.doc.version === 3) return;
   const box = document.createElement('div');
   box.className = 'p-hint';
-  box.innerHTML = '升级后本项目获得 v3 能力：<strong>页面图层</strong>（多个页面互相切换）与' +
-    '<strong>点击动作</strong>（按钮开/关面板、跳转页面）。<br><br>' +
-    '原设计内容原样保留为「默认呈现」，组件、资源、布局都不变；升级可 Ctrl+Z 撤销，保存后写入文件。';
-  openModal('升级为 v3 文档', box, [
+  box.innerHTML = '升级后将启用<strong>页面图层</strong>与<strong>点击动作</strong>；原设计内容保留为默认呈现，可撤销。';
+  openModal('升级为 v3', box, [
     ['取消', () => closeModal()],
     ['升级', () => {
       mutateDoc('升级为 v3 文档', (d) => {
@@ -565,7 +563,7 @@ function showUpgradeDialog() {
         Object.assign(d, up);
       });
       closeModal();
-      toast('已升级为 v3：顶栏出现「页面」菜单，选中按钮可配「点击动作」', 'ok');
+      toast('已升级为 v3', 'ok');
     }],
   ]);
 }

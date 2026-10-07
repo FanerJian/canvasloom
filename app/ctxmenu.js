@@ -47,7 +47,7 @@ export function openContextMenu(e, compId) {
     item(menu, '⧉ 复制', () => copySelection());
     item(menu, '❐ 创建副本', () => duplicateComponent(comp.id));
     if (state.clipboard && isContainer(comp)) {
-      item(menu, '⇩ 粘贴到此容器内', () => pasteInto(comp.id));
+      item(menu, '⇩ 粘贴至容器内', () => pasteInto(comp.id));
     }
     sep(menu);
     const parent = comp.parent ? findComponent(viewDoc(), comp.parent) : null;
@@ -56,7 +56,7 @@ export function openContextMenu(e, compId) {
     item(menu, '↑ 上移一层', idx > 0 ? () => reorder(comp.id, idx - 1) : null);
     item(menu, '↓ 下移一层', idx >= 0 && idx < count - 1 ? () => reorder(comp.id, idx + 1) : null);
     sep(menu);
-    item(menu, '🗑 删除（Ctrl+Z 可撤销）', () => deleteComponent(comp.id), 'danger');
+    item(menu, '🗑 删除', () => deleteComponent(comp.id), 'danger');
   } else {
     if (state.clipboard) item(menu, '⇩ 粘贴到页面', () => pasteClipboard());
     item(menu, '✕ 取消选择', () => select(null));

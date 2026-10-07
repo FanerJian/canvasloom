@@ -986,7 +986,7 @@ function onResizeUp() {
         if (Object.keys(posPatch).length) Object.assign(c.position, posPatch);
       });
       if (converted.length) {
-        toast(`已把「${converted.map((a) => (a === 'width' ? '宽' : '高')).join('、')}」从${converted.every((a) => (r.origSize[a].mode === 'fill') ? '填满剩余' : '自动')}转为固定值；Ctrl+Z 可撤销`, 'info');
+        toast(`已将${converted.map((a) => (a === 'width' ? '宽' : '高')).join('、')}转为固定值`, 'info');
       }
     }
   }

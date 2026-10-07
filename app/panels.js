@@ -53,7 +53,7 @@ export function renderBlocks() {
   host.textContent = '';
   const sel = document.createElement('select');
   sel.className = 'p-input p-blockmode';
-  sel.title = '选择浏览哪个场景模式的预设块（只影响本清单，不影响当前设计）';
+  sel.title = '浏览其他场景模式的预设块';
   const follow = document.createElement('option');
   follow.value = '';
   follow.textContent = `跟随项目（${(UI_MODES[docMode] || UI_MODES.generic).label}）`;
@@ -71,8 +71,7 @@ export function renderBlocks() {
   for (const blk of mode.blocks || []) {
     const b = document.createElement('button');
     b.className = 'blk-item';
-    b.title = `${blk.desc || blk.label}（点击加入选中的容器，或直接拖到画布上想放的位置）` +
-      (viewMode !== docMode ? `——来自「${mode.label}」预设` : '');
+    b.title = `${blk.desc || blk.label}` + (viewMode !== docMode ? `（${mode.label}）` : '');
     b.innerHTML = `<strong>${blk.label}</strong><span>${blk.desc || ''}</span>`;
     b.addEventListener('click', () => insertBlock(blk));
     attachPaletteDrag(b, { kind: 'block', label: blk.label });
@@ -111,7 +110,7 @@ export function renderPalette() {
     const b = document.createElement('button');
     b.className = 'pal-item';
     b.dataset.type = type;
-    b.title = def.desc + '（可点击加入，或直接拖到画布上）';
+    b.title = def.desc;
     b.innerHTML = `<span class="pal-ico">${TYPE_ICONS[type] || '▪'}</span><span>${def.label}</span>`;
     b.addEventListener('click', () => addComponent(type));
     attachPaletteDrag(b, { kind: 'component', type });
@@ -123,12 +122,12 @@ export function renderPalette() {
 // 粗布局入口：带用途说明（purpose）的常用分区，落位后随时改名改样式。
 // 列表占位/操作区会带最小内容骨架，说明条目与用途；不预设完整样式。
 const REGION_PRESETS = [
-  { key: 'region', label: '区域', icon: '▭', desc: '一块通用分区，选中后在右侧说明用途' },
+  { key: 'region', label: '区域', icon: '▭', desc: '通用分区' },
   { key: 'heading', label: '标题', icon: 'H', desc: '大号标题文字' },
-  { key: 'text', label: '文本占位', icon: '≡', desc: '一段占位说明文字，之后替换成正式内容' },
-  { key: 'image', label: '图片占位', icon: '🖼', desc: '图片位置，之后在「资源」里替换真实图片' },
-  { key: 'list', label: '列表占位', icon: '☰', desc: '带 3 条示例条目的列表骨架，说明条目数量与用途' },
-  { key: 'actions', label: '操作区', icon: '⏎', desc: '放主要操作按钮的横条，预置一个主按钮' },
+  { key: 'text', label: '文本占位', icon: '≡', desc: '占位文本' },
+  { key: 'image', label: '图片占位', icon: '🖼', desc: '图片占位' },
+  { key: 'list', label: '列表占位', icon: '☰', desc: '列表骨架（3 条示例）' },
+  { key: 'actions', label: '操作区', icon: '⏎', desc: '操作按钮区' },
 ];
 
 function renderRegionPalette() {
@@ -148,7 +147,6 @@ function renderRegionPalette() {
 
 function addRegion(key) {
   const target = insertionTarget();
-  const placed = { added: null };
   mutate('添加起步区域', (doc) => {
     const parent = doc.components[target];
     const freeParent = state.freeMove && parent.layout.mode !== 'free';
@@ -191,14 +189,9 @@ function addRegion(key) {
         if (child && child.position) { child.position.left += 12; child.position.top += 12; }
       }
     }
-    placed.added = comp.id;
     state.pendingSelect = comp.id;
     state.lastAdded = comp.id;
   });
-  if (placed.added && state.freeMove) {
-    // 提示一次落位规则：自由模式下需要拖到目标位置
-    toast('已添加；自由移动模式下可直接拖到想放的位置', 'info');
-  }
 }
 
 function addComponent(type) {
@@ -235,7 +228,7 @@ export function renderTree() {
     // v3 解析失败：树同样无从展示，画布错误卡已给说明
     const hint = document.createElement('div');
     hint.className = 'p-hint';
-    hint.textContent = '当前文档无法解析为设计视图，请查看画布上的错误说明。';
+    hint.textContent = '文档无法解析，详见画布提示';
     tree.appendChild(hint);
     return;
   }
@@ -376,8 +369,7 @@ export function renderProperties() {
   if (shadowPatch) {
     const hint = document.createElement('div');
     hint.className = 'p-hint';
-    hint.textContent = '注意：当前方案对组件覆盖了样式（' + Object.keys(shadowPatch).join('、') + '）。' +
-      '下方修改写入呈现方案基础样式，显示效果仍以变体覆盖为准（覆盖键请用 CLI/JSON 维护）。';
+    hint.textContent = '当前方案覆盖了样式（' + Object.keys(shadowPatch).join('、') + '）；修改写入呈现基础样式，显示以覆盖为准。';
     secStyle.appendChild(hint);
   }
   for (const f of STYLE_FIELDS) {
@@ -479,8 +471,8 @@ function canvasSection() {
   const hint = document.createElement('div');
   hint.className = 'p-hint';
   hint.textContent = following
-    ? '根容器当前跟随画布（百分比 100%）；预览与导出按视口裁剪。'
-    : '根容器当前为固定尺寸：修改画布不会改变它（旧项目语义）。需要自动伸缩请勾选上方选项。';
+    ? '根容器跟随画布。'
+    : '根容器为固定尺寸，不随画布变化；如需跟随请启用上方选项。';
   sec._body.appendChild(hint);
   return sec;
 }
@@ -649,7 +641,7 @@ function setComponentPlacement(id, mode) {
   const parentStyle = parentNode ? getComputedStyle(parentNode) : null;
   if (mode === 'flow' && parent.layout.mode === 'free') { toast('自由布局容器中的子组件必须独立摆放', 'info'); return; }
   if (state.mode !== 'design' || !rect || !origin || !parentStyle) {
-    toast('当前无法读取画布实测位置，暂不能保留原位置切换摆放方式', 'info');
+    toast('无法获取实测位置，已取消转换', 'info');
     return;
   }
   const left = Math.round(rect.x - origin.x - (parseFloat(parentStyle.borderLeftWidth) || 0) - normalizePadding(parent.layout.padding)[3]);
@@ -749,7 +741,7 @@ export function deleteComponent(id) {
     // v3：清理指向被删组件的点击动作与变体补丁键，保持文档可保存
     if (doc.version === 3) cleanupDeletedRefs(doc, doc.__presentationId, removed);
   });
-  toast(`已删除「${label}」，Ctrl+Z 可撤销`);
+  toast(`已删除「${label}」`);
 }
 
 // 创建副本（供右键菜单与 Ctrl+D 使用）
@@ -827,8 +819,8 @@ function sizeRow(comp, axis, label) {
     num.style.display = (mode === 'fixed' || mode === 'percent' || mode === 'fill') ? '' : 'none';
     num.value = mode === 'fill' ? (s.flex || 1) : (s.value != null ? s.value : '');
     num.step = mode === 'fill' ? 1 : 'any';
-    if (mode === 'fill') num.title = '伸展比例（份数）';
-    else if (mode === 'percent') num.title = `百分比 0-${LIMITS.percentMax}（可大于 100 做出血/超大装饰）`;
+    if (mode === 'fill') num.title = '伸展份数';
+    else if (mode === 'percent') num.title = '百分比';
     else num.title = '像素值';
   };
   refreshNum();
@@ -998,7 +990,7 @@ function layoutSection(comp) {
   if (L.mode === 'free') {
     const hint = document.createElement('div');
     hint.className = 'p-hint';
-    hint.textContent = '自由布局：子元素按"位置与尺寸"中的左/上坐标摆放，画布拖动直接改位置，支持参考线吸附。';
+    hint.textContent = '自由布局：拖动定位，支持吸附。';
     sec._body.appendChild(hint);
   }
   return sec;
@@ -1097,8 +1089,8 @@ function v3BindingSection(comp) {
         const hint = document.createElement('div');
         hint.className = 'p-hint';
         hint.textContent = isGoto
-          ? '还没有页面图层：用顶栏「页面」菜单新建页面，再回来选跳转目标。'
-          : '本呈现方案还没有「初始收起」的容器：先把某个容器的初始展开关掉，再回来选目标。';
+          ? '暂无页面，请先在「页面」菜单新建。'
+          : '暂无收起的面板，请先将某个容器的初始展开关闭。';
         sec.appendChild(hint);
       } else {
         sec.appendChild(rowSelect(isGoto ? '跳转目标页面' : '动作目标面板', targets, act.target || '', (v) => setActionTarget(comp.id, v)));
@@ -1113,20 +1105,19 @@ function v3BindingSection(comp) {
       const isStart = pages.length > 0 && pages[0][0] === comp.id;
       const phint = document.createElement('div');
       phint.className = 'p-hint';
-      phint.textContent = '这是页面图层：铺满画布、被 goto 动作切换显示。' +
-        (isStart ? '当前是起始页（预览打开时最先显示）。' : '需要的话可把它设为起始页。');
+      phint.textContent = '页面图层：铺满画布，由跳转动作切换显示。' + (isStart ? '当前为起始页。' : '');
       sec.appendChild(phint);
       if (!isStart) {
         sec.appendChild(rowButtons('页面顺序', [['设为起始页', () => makeStartPage(comp.id), false]]));
       }
     } else {
-      sec.appendChild(rowCheck('初始展开（关闭后可作为点击动作的目标面板）', oc.initiallyOpen !== false, (v) => setInitiallyOpen(comp.id, v)));
+      sec.appendChild(rowCheck('初始展开', oc.initiallyOpen !== false, (v) => setInitiallyOpen(comp.id, v)));
     }
   }
 
   const hint = document.createElement('div');
   hint.className = 'p-hint';
-  hint.textContent = '说明：画布上的位置/样式修改写入当前呈现，对所有使用它的方案生效；方案差异用「方案向导」与风格令牌表达。';
+  hint.textContent = '画布修改写入当前呈现，对该呈现的所有方案生效。';
   sec.appendChild(hint);
   return sec;
 }
@@ -1183,9 +1174,9 @@ function setBindText(id, v) {
     });
     return;
   }
-  if (!V3_BIND_PATTERN.test(val)) { alert('绑定语法需为 feature:功能id.路径，例如 feature:bag.items[0]'); renderProperties(); return; }
+  if (!V3_BIND_PATTERN.test(val)) { alert('绑定格式：feature:功能ID.路径'); renderProperties(); return; }
   const fid = val.slice('feature:'.length).split('.')[0].split('[')[0];
-  if (!state.doc.features || !state.doc.features[fid]) { alert(`功能 "${fid}" 不存在，请先在「功能风格」面板创建`); renderProperties(); return; }
+  if (!state.doc.features || !state.doc.features[fid]) { alert(`功能 "${fid}" 不存在`); renderProperties(); return; }
   mutate(`设置 ${id} 的文本绑定`, (doc) => {
     const c = doc.components[id];
     c.bind = Object.assign({}, c.bind, { text: val });
@@ -1234,7 +1225,7 @@ function setInitiallyOpen(id, open) {
     const comps = pres && pres.components ? pres.components : {};
     const users = Object.values(comps).filter((c) => c && c.actions && c.actions.click && c.actions.click.target === id);
     if (users.length) {
-      alert(`有 ${users.length} 个按钮的点击动作指向本面板；请先移除这些动作，再改为初始展开`);
+      alert(`有 ${users.length} 个按钮指向此面板，请先移除对应动作`);
       renderProperties();
       return;
     }
@@ -1314,7 +1305,7 @@ export function copySelection() {
     Object.keys(clip.resources).length ? `${Object.keys(clip.resources).length} 个图片资源` : '',
     Object.keys(clip.features).length ? `${Object.keys(clip.features).length} 个功能` : '',
   ].filter(Boolean).join('、');
-  toast(`已复制 "${c.name}"（${n} 个组件${deps ? `、${deps}` : ''}）`);
+  toast(`已复制 "${c.name}"`);
 }
 
 export function pasteClipboard(targetParentId) {
@@ -1327,7 +1318,7 @@ export function pasteClipboard(targetParentId) {
   });
   for (const n of (result && result.notices) || []) toast(n.message, n.level === 'warn' ? 'warn' : 'info');
   if (result && !result.aborted && (result.notices || []).some((n) => n.level === 'warn')) {
-    toast('粘贴完成，但有需要留意的依赖处理（见上方提示）', 'warn');
+    toast('粘贴完成，部分依赖已调整', 'warn');
   }
 }
 
@@ -1357,18 +1348,18 @@ export function renderToolbarState() {
     } else if (state.conflict) {
       txt = '存在冲突';
       cls += ' st-bad';
-      tip = '保存时发现项目在编辑器之外被先改过：请在冲突弹窗里选择「加载最新」或「强制保存」';
+      tip = '项目已在编辑器之外更新';
     } else if (state.connDown) {
       txt = '连接中断';
       cls += ' st-bad';
-      tip = '与本地服务的连接断开，正在自动重连；重连前保存可能失败';
+      tip = '连接中断，正在重连';
     } else if (state.saving) {
       txt = '保存中…';
       cls += ' st-warn';
     } else if (state.dirty) {
       txt = '未保存';
       cls += ' st-warn';
-      tip = '有未保存的修改，按 Ctrl+S 保存；直接关闭页面也会自动留存草稿';
+      tip = '存在未保存的修改，Ctrl+S 保存';
     } else {
       txt = '已保存 · 修订号 ' + state.revision;
       cls += ' st-ok';
@@ -1387,27 +1378,23 @@ export function renderToolbarState() {
   const snapBtn = document.getElementById('btn-snap');
   if (snapBtn) {
     snapBtn.classList.toggle('active', state.snapEnabled);
-    snapBtn.title = state.snapEnabled
-      ? '吸附参考线：开（点击关闭；拖动时按住 Alt 临时绕过）'
-      : '吸附参考线：关（点击开启）';
+    snapBtn.title = state.snapEnabled ? '吸附参考线：已开启' : '吸附参考线：已关闭';
   }
   const freeBtn = document.getElementById('btn-free-move');
   if (freeBtn) {
     freeBtn.classList.toggle('active', state.freeMove);
     freeBtn.textContent = state.freeMove ? '自由移动' : '按布局移动';
-    freeBtn.title = state.freeMove ? '自由移动：开（拖动组件独立摆放）' : '自由移动：关（拖动按父布局排列）';
+    freeBtn.title = state.freeMove ? '自由移动：已开启' : '自由移动：已关闭';
   }
   const outsideBtn = document.getElementById('btn-show-outside');
   if (outsideBtn) {
     outsideBtn.classList.toggle('active', state.showOutsideCanvas);
-    outsideBtn.title = state.showOutsideCanvas
-      ? '设计视图显示画布外内容：开（预览/导出仍按视口裁剪）'
-      : '设计视图显示画布外内容：关（点击开启）';
+    outsideBtn.title = state.showOutsideCanvas ? '显示画布外内容：已开启' : '显示画布外内容：已关闭';
   }
   const selEl = document.getElementById('status-sel');
   if (selEl) {
     const c = selectedComp();
-    selEl.textContent = c ? `选中：${c.name}（${c.id} · ${COMPONENT_TYPES[c.type].label}）` : '未选中组件';
+    selEl.textContent = c ? `选中：${c.name}` : '未选中组件';
   }
   const segDesign = document.getElementById('btn-mode-design');
   const segPreview = document.getElementById('btn-mode-preview');

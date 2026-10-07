@@ -11,7 +11,7 @@
 import { defaultLayout } from './protocol.js';
 
 export const TEMPLATES = {
-  blank: { label: '空白布局', desc: '从空白画布开始，自己摆放区域' },
+  blank: { label: '空白布局', desc: '从空白画布开始' },
   sidebar: { label: '侧栏＋内容', desc: '左侧导航菜单，右侧主内容' },
   topnav: { label: '顶部导航＋内容', desc: '顶部导航栏，下方主内容' },
   dashboard: { label: '仪表盘分区', desc: '顶栏＋侧栏＋主内容，适合后台与看板' },

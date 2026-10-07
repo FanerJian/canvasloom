@@ -40,8 +40,8 @@ export function renderFeaturesPanel() {
   host.textContent = '';
   if (!state.doc || state.doc.version !== 3) {
     host.appendChild(el('div', 'p-hint',
-      state.doc ? '当前项目是 v1/v2 文档。功能 / 风格 / 方案是 v3 能力，v2 项目可长期保持原样。'
-        : '先打开或新建一个项目。'));
+      state.doc ? '功能、风格与方案为 v3 能力，当前文档为 v2。'
+        : '请先打开或新建项目。'));
     return;
   }
   const doc = state.doc;
@@ -77,7 +77,7 @@ function variantSection(doc) {
     list.appendChild(row);
   }
   wrap.appendChild(list);
-  const add = el('button', 'p-btn fs-add-btn', '＋ 新建方案（向导）');
+  const add = el('button', 'p-btn fs-add-btn', '＋ 新建方案');
   add.addEventListener('click', () => openVariantWizard());
   wrap.appendChild(add);
   return wrap;
@@ -91,7 +91,7 @@ export function switchVariant(v) {
 // ---- 功能（features） ----
 function featuresSection(doc) {
   const wrap = el('section', 'side-sec');
-  wrap.appendChild(secTitle('功能（共享数据源）', null));
+  wrap.appendChild(secTitle('功能', null));
   const list = el('div', 'fs-list');
   const features = doc.features || {};
   for (const fid of Object.keys(features)) {
@@ -167,7 +167,7 @@ function featuresSection(doc) {
 // ---- 风格（styles） ----
 function stylesSection(doc) {
   const wrap = el('section', 'side-sec');
-  wrap.appendChild(secTitle('风格（令牌包）', null));
+  wrap.appendChild(secTitle('风格', null));
   const list = el('div', 'fs-list');
   const styles = doc.styles || {};
   for (const sid of Object.keys(styles)) {
@@ -272,15 +272,13 @@ function stylesSection(doc) {
   addRow.appendChild(labelInput);
   addRow.appendChild(addBtn);
   wrap.appendChild(addRow);
-  const hint = el('div', 'p-hint', '删除/重命名被组件引用的令牌后，保存检查会指出悬空引用。');
-  wrap.appendChild(hint);
-  return wrap;
+    return wrap;
 }
 
 // ---- 呈现（presentations） ----
 function presentationsSection(doc) {
   const wrap = el('section', 'side-sec');
-  wrap.appendChild(secTitle('呈现方案', null));
+  wrap.appendChild(secTitle('呈现', null));
   const list = el('div', 'fs-list');
   const presentations = doc.presentations || {};
   const activePresId = activeVariantPresentationId(doc);
@@ -305,14 +303,14 @@ function presentationsSection(doc) {
 
     const btnRow = el('div', 'fs-row');
     const copyBtn = el('button', 'p-btn', '⧉ 复制为新呈现');
-    copyBtn.title = '复制整棵组件树为新呈现；用方案向导为它生成方案后即可编辑';
+    copyBtn.title = '复制为新的呈现';
     copyBtn.addEventListener('click', () => {
       mutateDoc(`复制呈现方案 ${pid}`, (d) => {
         const newId = uniquePresentationId(d, pid + '_copy');
         const cloned = JSON.parse(JSON.stringify(d.presentations[pid]));
         cloned.label = ((d.presentations[pid] && d.presentations[pid].label) || pid) + ' 副本';
         d.presentations[newId] = cloned;
-        toast(`已创建呈现「${cloned.label}」（${newId}）；用方案向导为它生成方案后即可编辑`, 'ok');
+        toast(`已创建呈现「${cloned.label}」`, 'ok');
       });
     });
     btnRow.appendChild(copyBtn);
@@ -322,7 +320,7 @@ function presentationsSection(doc) {
     list.appendChild(item);
   }
   wrap.appendChild(list);
-  wrap.appendChild(el('div', 'p-hint', '画布编辑的总是「当前方案」指向的呈现；切到指向其他呈现的方案即可编辑它。'));
+  wrap.appendChild(el('div', 'p-hint', '画布编辑当前方案所指向的呈现。'));
   return wrap;
 }
 
@@ -340,7 +338,7 @@ export function openVariantWizard() {
   const presIds = Object.keys(doc.presentations || {});
   const styleIds = Object.keys(doc.styles || {});
   if (!presIds.length || !styleIds.length) {
-    toast('文档缺少呈现或风格，无法生成方案', 'bad');
+    toast('缺少呈现或风格，无法生成方案', 'bad');
     return;
   }
   const activePresId = activeVariantPresentationId(doc);
@@ -377,7 +375,7 @@ export function openVariantWizard() {
     nextBtn.textContent = step === 3 ? '生成方案' : '下一步';
 
     if (step === 1) {
-      body.appendChild(el('div', 'p-label', '这一方案显示哪个呈现？（画布编辑的就是它）'));
+      body.appendChild(el('div', 'p-label', '选择呈现'));
       for (const pid of presIds) {
         const p = doc.presentations[pid] || {};
         const row = radioRow(pid,
@@ -386,7 +384,7 @@ export function openVariantWizard() {
         body.appendChild(row);
       }
     } else if (step === 2) {
-      body.appendChild(el('div', 'p-label', '应用哪个风格（令牌决定颜色/字体/圆角等）？'));
+      body.appendChild(el('div', 'p-label', '选择风格'));
       for (const sid of styleIds) {
         const s = doc.styles[sid] || {};
         const toks = Object.entries((s && s.tokens) || {}).slice(0, 4)
@@ -398,7 +396,7 @@ export function openVariantWizard() {
         body.appendChild(row);
       }
     } else {
-      body.appendChild(el('div', 'p-label', '方案名称（可中文，会自动生成唯一 id）'));
+      body.appendChild(el('div', 'p-label', '方案名称'));
       if (!wizLabelInput.value) {
         const p = doc.presentations[sel.presentation] || {};
         const s = doc.styles[sel.style] || {};
@@ -410,7 +408,7 @@ export function openVariantWizard() {
       refreshId();
       body.appendChild(wizIdLine);
       body.appendChild(el('div', 'p-hint',
-        '生成后将立即设为当前显示方案（画布跟随），并随下次保存写入文档。Ctrl+Z 可一步撤销。'));
+        '生成后设为当前方案，可撤销。'));
     }
   }
 

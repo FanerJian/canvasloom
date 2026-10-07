@@ -155,7 +155,7 @@ export async function runCheck() {
   const view = viewDoc();
   const renderBase = view || doc; // v3 解析失败时退回原文档给出结构错误
   const vp = state.previewViewport ? { width: state.previewViewport[0], height: state.previewViewport[1] } : { width: renderBase.canvas.width, height: renderBase.canvas.height };
-  toast('正在实测布局……');
+  toast('正在检查布局…');
   // 设计视图一次只显示一个页面图层：实测范围 = 当前页面（其他页面互斥隐藏，
   // 堆叠渲染会产生跨页重叠/遮挡的误导结论）。设计视图不隐藏初始收起面板
   // （编辑时全部可见），因此这里只按页面显隐，面板保持完整参与检查。
@@ -182,9 +182,9 @@ function showReport() {
   const activePageName = state.activePageId && viewDoc() && viewDoc().components[state.activePageId]
     ? (viewDoc().components[state.activePageId].name || state.activePageId) : null;
   head.innerHTML = `<strong>${errCount ? '✗' : warnCount ? '△' : '✓'} ${errCount} 个错误 · ${warnCount} 个警告</strong>` +
-    `<span class="report-scope">视口 ${viewport.width} × ${viewport.height}；结构检查覆盖全部组件，实测检查覆盖该视口下的显示结果` +
-    (hiddenIds && hiddenIds.length ? `（当前页面「${escapeHtml(activePageName || '')}」；其他页面互斥隐藏，不参与可见性与重叠结论）` : '') +
-    `。</span>`;
+    `<span class="report-scope">检查范围：视口 ${viewport.width} × ${viewport.height}` +
+    (hiddenIds && hiddenIds.length ? `（当前页面「${escapeHtml(activePageName || '')}」，其余页面不参与检查）` : '') +
+    `</span>`;
   box.appendChild(head);
 
   const list = document.createElement('div');
@@ -192,7 +192,7 @@ function showReport() {
   if (!issues.length) {
     const empty = document.createElement('div');
     empty.className = 'report-issue';
-    empty.textContent = '没有发现问题：结构合法，且在该视口下无溢出、越界或重叠。';
+    empty.textContent = '未发现问题';
     list.appendChild(empty);
   }
   for (const it of issues) {
@@ -225,10 +225,9 @@ export async function runExport() {
       <select id="exp-vp" class="p-input">
         ${VIEWPORTS.map(([label, vp]) => `<option value="${vp ? vp.join('x') : 'canvas'}">${label}${vp ? '' : `（${doc.canvas.width}×${doc.canvas.height}）`}</option>`).join('')}
       </select></div>
-    <div class="p-row"><label class="p-check"><input type="checkbox" id="exp-shot" checked> 包含页面截图（PNG）</label></div>
-    <div class="p-row"><label class="p-check"><input type="checkbox" id="exp-snap" checked> 包含布局快照（实测位置）与检查报告</label></div>
-    <div class="p-hint">导出内容写入 exports 目录：设计文件、snapshot.json、report.json、自包含 preview.html、screenshot.png。</div>
-    ${doc.version === 3 ? '<div class="p-hint">多页面/交互项目：截图与实测按预览初始状态生成（起始页 + 初始收起面板隐藏），实际范围记录在 report.json 的 scope 字段。</div>' : ''}`;
+    <div class="p-row"><label class="p-check"><input type="checkbox" id="exp-shot" checked> 包含页面截图</label></div>
+    <div class="p-row"><label class="p-check"><input type="checkbox" id="exp-snap" checked> 包含布局快照与检查报告</label></div>
+    <div class="p-hint">导出内容写入 exports 目录。</div>`;
   openModal('导出设计', box, [
     ['取消', () => closeModal()],
     ['导出', async () => {
@@ -237,7 +236,7 @@ export async function runExport() {
       const wantShot = box.querySelector('#exp-shot').checked;
       const wantSnap = box.querySelector('#exp-snap').checked;
       closeModal();
-      toast('正在生成导出包……');
+      toast('正在生成导出包…');
       const view = viewDoc() || doc; // 实测/截图按解析视图；结构与打包用原文档
       // 截图/实测采用预览页打开时的初始状态（S1 B06）：起始页 + 初始收起面板；
       // 未显示的页面不参与可见性结论，并在报告 scope 中注明实际检查范围
@@ -263,7 +262,7 @@ export async function runExport() {
         };
       }
       const r = await exportBundle({ name: state.name, doc, snapshot, report, screenshot });
-      if (r.ok) toast('已导出到 ' + r.dir, 'ok');
+      if (r.ok) toast('已导出：' + r.dir, 'ok');
       else toast('导出失败：' + (r.error || '未知错误'), 'bad');
     }],
   ]);
