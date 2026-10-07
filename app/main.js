@@ -1,7 +1,7 @@
 // ============================================================
 // 编辑器入口：装配、工具栏、快捷键、保存与外部修改协同
 // ============================================================
-import { state, on, select, undo, redo, loadProject, adoptExternal, selectedComp, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas, viewDoc, pagesOfDoc, setActivePage, addPage, mutateDoc } from './store.js';
+import { state, on, select, undo, redo, loadProject, adoptExternal, adoptDraft, pushUndoEntry, selectedComp, setMode, setSnapEnabled, setFreeMove, setShowOutsideCanvas, viewDoc, pagesOfDoc, setActivePage, addPage, mutateDoc, saveDraftNow, scheduleDraftSave, clearDraft, loadDraft } from './store.js';
 import { UI_MODES } from '../shared/modes.js';
 import { LIMITS } from '../shared/protocol.js';
 import { validateDoc } from '../shared/validate.js';
@@ -14,6 +14,7 @@ import { closeContextMenu } from './ctxmenu.js';
 import { upgradeDoc, upgradeDocToV3, CompatError } from '../shared/compat.js';
 
 const $ = (id) => document.getElementById(id);
+const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // 服务端协议能力探测：旧服务进程不认识 v2 时，前端保持 v1 行为（保存旧版本号），
 // 避免新旧代码混跑期间出现"编辑器能画、服务端拒收"的窗口期。
@@ -97,7 +98,8 @@ function renderAll(detail = {}) {
 
 // ---------- 打开项目 ----------
 // v1 文档读入后在内存升级为 v2（不写盘）；保存时服务端自动先备份 v1 原文件。
-async function openProjectByName(name, { silent } = {}) {
+// name 参数是项目的「稳定身份」（= 文件名），展示名在 doc.name（S1 B07）。
+async function openProjectByName(name, { silent, checkDraft } = {}) {
   const r = await getProject(name);
   if (!r.ok) {
     if (!silent) toast('打开失败：' + (r.error || '未知错误'), 'bad');
@@ -111,8 +113,75 @@ async function openProjectByName(name, { silent } = {}) {
   }
   loadProject(name, doc);
   localStorage.setItem('canvasloom:last', name);
-  if (!silent) toast(`已打开「${name}」（修订号 ${doc.revision}）`, 'ok');
+  if (!silent) toast(`已打开「${(doc && doc.name) || name}」（修订号 ${doc.revision}）`, 'ok');
+  if (checkDraft) maybeOfferDraftRecovery();
   return true;
+}
+
+// ---------- 项目切换守卫（S1 B01）----------
+// 新建/打开项目前统一处理未保存修改：保存后继续、保留草稿后继续、明确丢弃。
+// 「写入成功才切换」——保存失败或用户取消时停留在当前项目（proceed 不执行）。
+function guardSwitchProject(proceed) {
+  if (!state.dirty) { proceed(); return; }
+  const draftNote = state.draftUnavailable
+    ? `<br><strong class="ri-msg" style="color:#b45309">注意：自动草稿不可用（${escapeHtml(state.draftUnavailable)}），"保留草稿"可能失败，建议直接保存。</strong>`
+    : '';
+  const box = document.createElement('div');
+  box.className = 'p-hint';
+  box.innerHTML = `当前项目「${escapeHtml((state.doc && state.doc.name) || state.name || '')}」有<strong>未保存的修改</strong>。切换前请选择如何处理：${draftNote}`;
+  openModal('未保存的修改', box, [
+    ['保存并继续', async () => {
+      await save();
+      if (!state.dirty) { closeModal(); proceed(); }
+      // 保存失败/出现冲突弹窗：停留在当前状态，用户处理后可重试
+    }],
+    ['保留草稿并继续', () => {
+      const ok = saveDraftNow();
+      closeModal();
+      if (!ok) toast('草稿未能保留（' + (state.draftUnavailable || '未知原因') + '），已按原样切换', 'warn');
+      else toast('未保存修改已保留为草稿，下次打开该项目时可找回', 'ok');
+      proceed();
+    }],
+    ['放弃修改并继续', () => { clearDraft(); closeModal(); proceed(); }],
+    ['取消', () => closeModal()],
+  ]);
+}
+
+// ---------- 未保存草稿找回（S1）----------
+// 打开项目后若存在该项目的草稿（且与磁盘内容不同），提示恢复或丢弃。
+function maybeOfferDraftRecovery() {
+  const d = loadDraft(state.name);
+  if (!d || !state.doc) return;
+  if (JSON.stringify(d.doc) === JSON.stringify(state.doc)) { clearDraft(); return; } // 与磁盘一致的过期草稿
+  const stale = d.baseRevision != null && d.baseRevision !== state.revision;
+  const box = document.createElement('div');
+  box.className = 'p-hint';
+  box.innerHTML = `发现项目「${escapeHtml((d.doc && d.doc.name) || state.name)}」的未保存草稿` +
+    `（保存于 ${d.savedAt ? escapeHtml(new Date(d.savedAt).toLocaleString()) : '未知时间'}，基于修订号 ${d.baseRevision ?? '?'}）。` +
+    (stale ? `<br><strong>注意：</strong>磁盘文件已更新到修订号 ${state.revision}；恢复后保存时会按修订号冲突处理，不会静默覆盖外部修改。` : '') +
+    '<br><br>恢复草稿：未保存修改回到画布（Ctrl+Z 可回到磁盘版本）。丢弃草稿：以磁盘内容为准。';
+  openModal('找回未保存的草稿', box, [
+    ['恢复草稿', () => { closeModal(); adoptDraft(d.doc); clearDraft(); toast('已恢复未保存草稿；Ctrl+Z 可回到磁盘版本', 'ok'); }],
+    ['丢弃草稿', () => { clearDraft(); closeModal(); }],
+  ]);
+}
+
+// ---------- 加载最新（S1 B02）----------
+// 冲突/外部修改时采纳磁盘版本：把当前未保存文档压成一条撤销记录再载入，
+// "采纳外部版本"成为可撤销动作；不再出现"提示可撤销、实际历史已清空"的丢失。
+async function reloadLatestFromDisk() {
+  const r = await getProject(state.name);
+  if (!r.ok) { toast('加载最新失败：' + (r.error || '未知错误'), 'bad'); return; }
+  let doc;
+  try { doc = adoptDocForSession(r.doc); }
+  catch (e) { toast('无法加载最新：' + (e instanceof CompatError ? e.message : '文档版本不兼容'), 'bad'); return; }
+  const hadDirty = state.dirty;
+  if (hadDirty) {
+    pushUndoEntry({ doc: state.doc, label: '加载最新前（未保存修改）', revision: state.revision });
+  }
+  loadProject(state.name, doc, { keepHistory: true });
+  if (hadDirty) toast('已加载最新版本；之前的未保存修改可 Ctrl+Z 找回（本次会话内）', 'ok');
+  else toast('已加载最新版本', 'ok');
 }
 
 async function showOpenDialog() {
@@ -123,11 +192,12 @@ async function showOpenDialog() {
   for (const p of projects) {
     const row = document.createElement('button');
     row.className = 'open-item';
-    row.innerHTML = `<strong>${p.name}</strong><span>修订号 ${p.revision} · ${new Date(p.updatedAt).toLocaleString()}</span>`;
-    row.addEventListener('click', async () => {
+    row.title = '项目文件：' + p.id;
+    row.innerHTML = `<strong>${escapeHtml(p.name || p.id)}</strong>` +
+      `<span>${escapeHtml(p.id)} · 修订号 ${p.revision} · ${new Date(p.updatedAt).toLocaleString()}</span>`;
+    row.addEventListener('click', () => {
       closeModal();
-      if (state.dirty && !confirm('当前有未保存的修改，打开其他项目将丢弃这些修改。继续？')) return;
-      await openProjectByName(p.name);
+      guardSwitchProject(async () => { await openProjectByName(p.id, { checkDraft: true }); });
     });
     box.appendChild(row);
   }
@@ -192,58 +262,77 @@ async function showNewDialog() {
   box.appendChild(input);
   openModal('新建项目', box, [
     ['取消', () => closeModal()],
-    ['创建', async () => {
+    ['创建', () => {
       const name = input.value.trim();
       if (!name) return;
-      const r = await createProject(name, chosen, startLayout);
-      if (!r.ok) { toast('创建失败：' + (r.error || '未知错误'), 'bad'); return; }
-      closeModal();
-      loadProject(name, r.doc);
-      localStorage.setItem('canvasloom:last', name);
-      toast(`已创建「${name}」（${UI_MODES[chosen].label} · ${startLayout === 'free' ? '自由摆放' : '自动排列'}）`, 'ok');
+      guardSwitchProject(async () => {
+        const r = await createProject(name, chosen, startLayout);
+        if (!r.ok) { toast('创建失败：' + (r.error || '未知错误'), 'bad'); return; }
+        closeModal(); // 未脏路径下守卫不弹窗，这里负责关掉新建弹窗
+        loadProject(name, r.doc);
+        localStorage.setItem('canvasloom:last', name);
+        toast(`已创建「${name}」（${UI_MODES[chosen].label} · ${startLayout === 'free' ? '自由摆放' : '自动排列'}）`, 'ok');
+      });
     }],
   ]);
   setTimeout(() => input.focus(), 50);
 }
 
-// ---------- 保存 ----------
+// ---------- 保存（保存会话，S1）----------
+// 保存是异步的：提交后用户可能继续编辑、甚至切换项目。成功返回时先校验
+// 「同一项目 + 同一文档 + 编辑序号未变」再清 dirty——提交的那份文档才算已保存，
+// 保存期间的继续编辑不会被误标为已保存（待验证风险项的修复）。
+let saving = false;
 async function save({ force } = {}) {
-  if (!state.doc || !state.name) return;
-  const doc = state.doc;
-  const report = validateDoc(doc);
-  if (!report.ok) {
-    const box = document.createElement('div');
-    box.className = 'report-list';
-    for (const e of report.errors.slice(0, 20)) {
-      const row = document.createElement('div');
-      row.className = 'report-issue sev-error';
-      row.innerHTML = `<span class="ri-badge">错误</span><span class="ri-code">${e.code}</span><span class="ri-msg">${e.message}</span>`;
-      box.appendChild(row);
+  if (!state.doc || !state.name || saving) return;
+  saving = true;
+  try {
+    const session = { name: state.name, doc: state.doc, seq: state.editSeq };
+    const report = validateDoc(session.doc);
+    if (!report.ok) {
+      const box = document.createElement('div');
+      box.className = 'report-list';
+      for (const e of report.errors.slice(0, 20)) {
+        const row = document.createElement('div');
+        row.className = 'report-issue sev-error';
+        row.innerHTML = `<span class="ri-badge">错误</span><span class="ri-code">${e.code}</span><span class="ri-msg">${e.message}</span>`;
+        box.appendChild(row);
+      }
+      openModal('无法保存：文档存在结构错误', box, [['知道了', () => closeModal()]]);
+      return;
     }
-    openModal('无法保存：文档存在结构错误', box, [['知道了', () => closeModal()]]);
-    return;
+    const base = force ? (state._serverRevision ?? state.revision) : state.revision;
+    const r = await saveProject(state.name, session.doc, base);
+    if (r.ok) {
+      state.revision = r.revision;
+      state._serverRevision = r.revision;
+      const sameSession = state.name === session.name && state.doc === session.doc && state.editSeq === session.seq;
+      if (sameSession) {
+        state.dirty = false;
+        clearDraft();
+        toast(`已保存（修订号 ${r.revision}）`, 'ok');
+      } else {
+        // 保存期间又有修改（或已切走）：磁盘内容是新修订号，但画布仍是未保存状态
+        scheduleDraftSave();
+        if (state.name === session.name) toast(`已写入修订号 ${r.revision}；保存期间又有新的修改，当前内容仍为未保存`, 'info');
+      }
+      renderToolbarState();
+      return;
+    }
+    if (r.status === 409) {
+      state._serverRevision = r.currentRevision;
+      const box = document.createElement('div');
+      box.innerHTML = `<div class="p-hint">文件在编辑器之外被修改（agent 或 CLI）。<br>服务器当前修订号：<strong>${r.currentRevision}</strong>，本次保存基于：<strong>${base}</strong>。<br><br>建议"加载最新"以免覆盖（当前未保存内容会保留为可撤销记录，Ctrl+Z 找回）；选择"强制保存"将以当前画布内容覆盖外部修改（可撤销）。</div>`;
+      openModal('修订号冲突', box, [
+        ['加载最新', async () => { closeModal(); await reloadLatestFromDisk(); }],
+        ['强制保存', async () => { closeModal(); await save({ force: true }); }, 'danger'],
+      ]);
+      return;
+    }
+    toast('保存失败：' + (r.error || '未知错误'), 'bad');
+  } finally {
+    saving = false;
   }
-  const base = force ? (state._serverRevision ?? state.revision) : state.revision;
-  const r = await saveProject(state.name, doc, base);
-  if (r.ok) {
-    state.revision = r.revision;
-    state._serverRevision = r.revision;
-    state.dirty = false;
-    renderToolbarState();
-    toast(`已保存（修订号 ${r.revision}）`, 'ok');
-    return;
-  }
-  if (r.status === 409) {
-    state._serverRevision = r.currentRevision;
-    const box = document.createElement('div');
-    box.innerHTML = `<div class="p-hint">文件在编辑器之外被修改（agent 或 CLI）。<br>服务器当前修订号：<strong>${r.currentRevision}</strong>，本次保存基于：<strong>${base}</strong>。<br><br>建议"加载最新"以免覆盖；选择"强制保存"将以当前画布内容覆盖外部修改（可撤销）。</div>`;
-    openModal('修订号冲突', box, [
-      ['加载最新', async () => { closeModal(); await openProjectByName(state.name, { silent: true }); toast('已加载最新版本', 'ok'); }],
-      ['强制保存', async () => { closeModal(); await save({ force: true }); }, 'danger'],
-    ]);
-    return;
-  }
-  toast('保存失败：' + (r.error || '未知错误'), 'bad');
 }
 
 // ---------- 外部修改（SSE） ----------
@@ -254,10 +343,10 @@ function connect() {
       if (!r.ok) return;
       if (state.dirty) {
         const box = document.createElement('div');
-        box.innerHTML = `<div class="p-hint">文件被外部修改（新修订号 ${r.doc.revision}），但当前画布有未保存修改。<br><br>保留我的修改：不做任何变更；加载最新：丢弃未保存修改并载入外部版本（未保存内容可撤销找回）。</div>`;
+        box.innerHTML = `<div class="p-hint">文件被外部修改（新修订号 ${r.doc.revision}），但当前画布有未保存修改。<br><br>保留我的修改：不做任何变更；加载最新：载入外部版本，当前未保存内容会保留为一条撤销记录（Ctrl+Z 找回，本次会话内有效）。</div>`;
         openModal('外部修改', box, [
           ['保留我的修改', () => { state._serverRevision = r.doc.revision; closeModal(); }],
-          ['加载最新', async () => { closeModal(); await openProjectByName(state.name, { silent: true }); }],
+          ['加载最新', async () => { closeModal(); await reloadLatestFromDisk(); }],
         ]);
       } else {
         adoptExternal(adoptDocForSession(r.doc));
@@ -601,10 +690,10 @@ async function boot() {
 
   const last = localStorage.getItem('canvasloom:last');
   let opened = false;
-  if (last) opened = await openProjectByName(last, { silent: true });
+  if (last) opened = await openProjectByName(last, { silent: true, checkDraft: true });
   if (!opened) {
     const projects = await listProjects();
-    if (projects.length) opened = await openProjectByName(projects[0].name, { silent: true });
+    if (projects.length) opened = await openProjectByName(projects[0].id, { silent: true, checkDraft: true });
   }
   if (!opened) {
     // 无项目：画布区显示极简引导卡（新建 / 打开），加载项目后自动隐藏
@@ -612,8 +701,11 @@ async function boot() {
   }
   setTimeout(fitZoom, 60);
   connect();
-  window.addEventListener('beforeunload', (e) => {
-    if (state.dirty) { e.preventDefault(); e.returnValue = ''; }
+  window.addEventListener('beforeunload', () => {
+    // 草稿保护：关闭前尽力把未保存修改存为草稿（localStorage 同步写，可完成）。
+    // 不阻止卸载——preventDefault 在浏览器弹原生确认框，在 Electron 壳里却会
+    // 静默拒绝关窗（点右上角 × 无任何反应）；数据已有草稿兜底，直接放行。
+    if (state.dirty) saveDraftNow();
   });
 }
 

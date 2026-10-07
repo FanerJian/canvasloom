@@ -5,6 +5,7 @@ import { state, select, setMode, setPreviewViewport, viewDoc, pagesOfDoc } from 
 import { renderDoc } from '../shared/renderer.js';
 import { validateDoc } from '../shared/validate.js';
 import { checkSnapshot } from '../shared/measure.js';
+import { extractInteractionSpec } from '../shared/runtime.js';
 import { buildEmbedHtml } from '../shared/export-html.js';
 import { loadRendererSource, loadModesSource, loadProtocolSource, loadResolveSource, loadRuntimeSource, exportBundle } from './api.js';
 import { openModal, closeModal, toast } from './panels.js';
@@ -66,6 +67,29 @@ export function initPreviewBar() {
   document.getElementById('pv-close').addEventListener('click', () => setMode('design'));
 }
 
+// ================= 运行时初始显隐（S1 B06）=================
+// 历史缺陷：截图/隐藏实测只渲染解析视图——全部页面叠在一起、初始收起面板全部
+// 展开，导出的 PNG 与预览页（按交互运行时显隐）不一致，多页面项目导出的是
+// 后面的页面。这里把「预览页打开那一刻的显隐状态」应用到实测与截图：
+//   · 隐藏初始收起面板（initiallyOpen:false）；
+//   · 隐藏起始页之外的页面图层（预览页从起始页打开）。
+// 隐藏组件在 checkSnapshot 中跳过可见性/规则/重叠结论（不产生误导性告警）。
+function runtimeInitialState(doc) {
+  if (!doc || doc.version !== 3) return { hiddenIds: [], startPageId: null };
+  const spec = extractInteractionSpec(doc, doc.activeVariant);
+  return {
+    hiddenIds: [...spec.initiallyClosed, ...spec.pages.slice(1)],
+    startPageId: spec.pages[0] || null,
+  };
+}
+
+function applyHiddenIds(rootEl, hiddenIds) {
+  for (const id of hiddenIds || []) {
+    const node = rootEl.querySelector(`[data-id="${CSS.escape(id)}"]`);
+    if (node) node.style.display = 'none';
+  }
+}
+
 // ================= 隐藏实测（布局快照） =================
 // 注意：测量不依赖 requestAnimationFrame（页面隐藏时 rAF 会被节流到 0）。
 // getBoundingClientRect 本身会强制同步布局；图片用 complete/decode 等待。
@@ -80,7 +104,7 @@ async function waitForImages(scope) {
   }));
 }
 
-export async function measureHidden(doc, viewport) {
+export async function measureHidden(doc, viewport, opts = {}) {
   const holder = document.createElement('div');
   holder.style.cssText = 'position:fixed;left:-99999px;top:0;width:' + viewport.width + 'px;height:' + viewport.height + 'px;overflow:hidden;';
   const inner = document.createElement('div');
@@ -89,6 +113,7 @@ export async function measureHidden(doc, viewport) {
   document.body.appendChild(holder);
   try {
     renderDoc(inner, doc, { viewport, editable: false });
+    applyHiddenIds(inner, opts.hiddenIds); // 与预览页一致的运行时初始显隐（S1 B06）
     await waitForImages(inner);
     const rootEl = inner.firstElementChild;
     const base = rootEl.getBoundingClientRect();
@@ -131,16 +156,21 @@ export async function runCheck() {
   const renderBase = view || doc; // v3 解析失败时退回原文档给出结构错误
   const vp = state.previewViewport ? { width: state.previewViewport[0], height: state.previewViewport[1] } : { width: renderBase.canvas.width, height: renderBase.canvas.height };
   toast('正在实测布局……');
-  const snapshot = await measureHidden(renderBase, vp);
+  // 设计视图一次只显示一个页面图层：实测范围 = 当前页面（其他页面互斥隐藏，
+  // 堆叠渲染会产生跨页重叠/遮挡的误导结论）。设计视图不隐藏初始收起面板
+  // （编辑时全部可见），因此这里只按页面显隐，面板保持完整参与检查。
+  const pageIds = pagesOfDoc();
+  const hiddenIds = pageIds.filter((id) => id !== state.activePageId);
+  const snapshot = await measureHidden(renderBase, vp, { hiddenIds });
   const staticReport = validateDoc(doc); // 结构检查恒对原文档（v3 覆盖全部 presentation）
-  const measureReport = checkSnapshot(renderBase, snapshot, { pageIds: pagesOfDoc() });
-  state.lastCheck = { snapshot, staticReport, measureReport, viewport: vp };
+  const measureReport = checkSnapshot(renderBase, snapshot, { pageIds, hiddenIds });
+  state.lastCheck = { snapshot, staticReport, measureReport, viewport: vp, hiddenIds };
   window.__lastCheck = state.lastCheck; // 调试/自动化检查出口
   showReport();
 }
 
 function showReport() {
-  const { staticReport, measureReport, viewport } = state.lastCheck;
+  const { staticReport, measureReport, viewport, hiddenIds } = state.lastCheck;
   const issues = [...staticReport.issues, ...(measureReport ? measureReport.issues : [])];
   const errCount = issues.filter((i) => i.severity === 'error').length;
   const warnCount = issues.filter((i) => i.severity === 'warning').length;
@@ -149,8 +179,12 @@ function showReport() {
   box.className = 'report-box';
   const head = document.createElement('div');
   head.className = 'report-head' + (errCount ? ' bad' : warnCount ? ' warn' : ' good');
+  const activePageName = state.activePageId && viewDoc() && viewDoc().components[state.activePageId]
+    ? (viewDoc().components[state.activePageId].name || state.activePageId) : null;
   head.innerHTML = `<strong>${errCount ? '✗' : warnCount ? '△' : '✓'} ${errCount} 个错误 · ${warnCount} 个警告</strong>` +
-    `<span class="report-scope">视口 ${viewport.width} × ${viewport.height}；结构检查覆盖全部组件，实测检查覆盖该视口下的显示结果。</span>`;
+    `<span class="report-scope">视口 ${viewport.width} × ${viewport.height}；结构检查覆盖全部组件，实测检查覆盖该视口下的显示结果` +
+    (hiddenIds && hiddenIds.length ? `（当前页面「${escapeHtml(activePageName || '')}」；其他页面互斥隐藏，不参与可见性与重叠结论）` : '') +
+    `。</span>`;
   box.appendChild(head);
 
   const list = document.createElement('div');
@@ -193,7 +227,8 @@ export async function runExport() {
       </select></div>
     <div class="p-row"><label class="p-check"><input type="checkbox" id="exp-shot" checked> 包含页面截图（PNG）</label></div>
     <div class="p-row"><label class="p-check"><input type="checkbox" id="exp-snap" checked> 包含布局快照（实测位置）与检查报告</label></div>
-    <div class="p-hint">导出内容写入 exports 目录：设计文件、snapshot.json、report.json、自包含 preview.html、screenshot.png。</div>`;
+    <div class="p-hint">导出内容写入 exports 目录：设计文件、snapshot.json、report.json、自包含 preview.html、screenshot.png。</div>
+    ${doc.version === 3 ? '<div class="p-hint">多页面/交互项目：截图与实测按预览初始状态生成（起始页 + 初始收起面板隐藏），实际范围记录在 report.json 的 scope 字段。</div>' : ''}`;
   openModal('导出设计', box, [
     ['取消', () => closeModal()],
     ['导出', async () => {
@@ -204,17 +239,28 @@ export async function runExport() {
       closeModal();
       toast('正在生成导出包……');
       const view = viewDoc() || doc; // 实测/截图按解析视图；结构与打包用原文档
+      // 截图/实测采用预览页打开时的初始状态（S1 B06）：起始页 + 初始收起面板；
+      // 未显示的页面不参与可见性结论，并在报告 scope 中注明实际检查范围
+      const { hiddenIds, startPageId } = runtimeInitialState(doc);
       let snapshot = null, report = null, screenshot = null;
-      if (wantSnap || wantShot) snapshot = await measureHidden(view, vp);
+      if (wantSnap || wantShot) snapshot = await measureHidden(view, vp, { hiddenIds });
       if (wantSnap) {
         const staticReport = validateDoc(doc);
-        const mReport = checkSnapshot(view, snapshot, { pageIds: pagesOfDoc() });
+        const mReport = checkSnapshot(view, snapshot, { pageIds: pagesOfDoc(), hiddenIds });
         report = { static: staticReport, measure: mReport,
           errors: [...staticReport.errors, ...mReport.errors], warnings: [...staticReport.warnings, ...mReport.warnings] };
       }
       if (wantShot) {
-        try { screenshot = await capturePng(view, vp); }
+        try { screenshot = await capturePng(view, vp, { hiddenIds }); }
         catch (e) { toast('截图失败：' + e.message, 'warn'); }
+      }
+      if (report) {
+        report.scope = {
+          viewport: vp,
+          startPageId: startPageId || null,
+          hiddenIds,
+          note: '截图与实测快照按预览初始状态生成：显示起始页与初始展开面板，初始收起面板与起始页之外的页面图层被隐藏；隐藏部分不参与可见性/重叠结论。',
+        };
       }
       const r = await exportBundle({ name: state.name, doc, snapshot, report, screenshot });
       if (r.ok) toast('已导出到 ' + r.dir, 'ok');
@@ -223,7 +269,7 @@ export async function runExport() {
   ]);
 }
 
-async function capturePng(doc, viewport) {
+async function capturePng(doc, viewport, opts = {}) {
   if (typeof window.html2canvas !== 'function') throw new Error('html2canvas 未加载');
   const holder = document.createElement('div');
   holder.style.cssText = `position:fixed;left:-99999px;top:0;width:${viewport.width}px;height:${viewport.height}px;overflow:hidden;background:#fff;`;
@@ -233,6 +279,7 @@ async function capturePng(doc, viewport) {
   document.body.appendChild(holder);
   try {
     renderDoc(inner, doc, { viewport, editable: false });
+    applyHiddenIds(inner, opts.hiddenIds); // 与预览页一致的运行时初始显隐（S1 B06）
     await waitForImages(inner);
     // html2canvas 内部依赖渲染帧：页面隐藏（rAF 节流）时限时兜底，避免导出卡死
     const canvas = await Promise.race([

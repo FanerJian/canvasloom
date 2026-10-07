@@ -15,7 +15,9 @@ import { randomUUID } from 'node:crypto';
 import * as P from '../shared/protocol.js';
 import { validateDoc, applyOps, ApplyError } from '../shared/validate.js';
 import { checkSnapshot } from '../shared/measure.js';
+import { editScopeOf } from '../shared/resolve.js';
 import { buildPreviewHtml } from '../shared/export-html.js';
+import { publishExportDir, exportTaskSuffix } from '../shared/exportdir.js';
 import { withFileLock, lockFileFor } from '../shared/filelock.js';
 import { backupV1BeforeWrite } from '../shared/backup.js';
 import { inspectDocVersion, upgradeDoc, isSupportedVersion, CompatError } from '../shared/compat.js';
@@ -53,9 +55,9 @@ function usage() {
 
 用法：
   cli.cmd catalog
-  cli.cmd inspect <项目名|文件路径> [组件ID] [--json]
+  cli.cmd inspect <项目名|文件路径> [组件ID] [--variant <id>] [--json]
   cli.cmd apply   <项目名|文件路径> --ops <ops.json> [--base-revision N] [--json]
-  cli.cmd validate <项目名|文件路径> [--snapshot snapshot.json] [--json]
+  cli.cmd validate <项目名|文件路径> [--snapshot snapshot.json] [--variant <id>] [--json]
   cli.cmd export  <项目名|文件路径> [--out 目录] [--variant <id>] [--json]
 
 操作格式（apply 的 ops.json）：
@@ -70,6 +72,8 @@ function usage() {
 说明：
   · baseRevision 必填：声明"我基于哪个修订号修改"，不匹配即拒绝（E_REVISION_STALE），
     防止覆盖主人或他人刚完成的修改；服务端与 CLI 的写入共用同一把项目文件锁；
+  · v3 文档的 inspect / validate --snapshot 默认读 activeVariant 指向的呈现方案
+    （原始语义，含 actions/bind/featureId/令牌引用），--variant <id> 可指定其他变体；
   · 导出包中的 preview.html 双击即可打开：含"测量布局 / 下载快照 / 截图"按钮；
   · v3 文档导出时页面内嵌变体解析器与交互运行时（按钮可点开/关面板）：
     缺省按 activeVariant 渲染，--variant <id> 可指定其他变体（不存在即报错），
@@ -207,16 +211,30 @@ function catalog() {
 }
 
 // ---------- inspect ----------
+// v3 文档：组件树在 presentations 内（S1 B03）。默认读 activeVariant 指向的
+// 呈现方案（原始语义，含 actions/bind/featureId/令牌引用），--variant <id> 可指定。
 function inspect() {
   const arg = positional[0];
   const compId = positional[1];
   const { doc } = resolveProject(arg);
-  if (compId && !P.findComponent(doc, compId)) {
-    fail('E_COMPONENT_MISSING', `组件 "${compId}" 不存在`, { available: Object.keys(doc.components).slice(0, 200) });
+  const wantedVariant = flags.variant || doc.activeVariant;
+  let scope;
+  try { scope = editScopeOf(doc, wantedVariant); }
+  catch (e) {
+    fail(e.code || 'E_VARIANT_UNKNOWN', e.message + '（inspect 需要定位到具体变体；--variant <id> 可指定）',
+      { variantId: wantedVariant == null ? null : String(wantedVariant) });
+  }
+  const isV3Scope = scope !== doc;
+  const scopeLabel = isV3Scope
+    ? `变体 "${scope.__variantId}" → 呈现方案 "${scope.__presentationId}"`
+    : '文档组件表（v1/v2）';
+  if (compId && !P.findComponent(scope, compId)) {
+    fail('E_COMPONENT_MISSING', `组件 "${compId}" 不存在（查找范围：${scopeLabel}）`,
+      { available: Object.keys(scope.components || {}).slice(0, 200) });
   }
   if (flags.json) {
     const tree = (id) => {
-      const c = P.findComponent(doc, id);
+      const c = P.findComponent(scope, id);
       const node = { id: c.id, type: c.type, name: c.name, purpose: c.purpose || undefined, size: c.size };
       if (c.layout) node.layout = c.layout;
       if (c.position) node.position = c.position;
@@ -225,16 +243,21 @@ function inspect() {
       if (P.isContainer(c)) node.children = (c.children || []).map(tree);
       return node;
     };
-    return out({ ok: true, name: doc.name, revision: doc.revision, canvas: doc.canvas, tree: tree('root'), component: compId ? P.findComponent(doc, compId) : undefined });
+    return out({ ok: true, name: doc.name, revision: doc.revision, version: doc.version,
+      variant: isV3Scope ? scope.__variantId : undefined,
+      presentation: isV3Scope ? scope.__presentationId : undefined,
+      canvas: doc.canvas, tree: tree('root'),
+      component: compId ? P.findComponent(scope, compId) : undefined });
   }
   const L = [];
-  L.push(`设计：${doc.name}（修订号 ${doc.revision}，画布 ${doc.canvas.width}×${doc.canvas.height}）`);
+  L.push(`设计：${doc.name}（修订号 ${doc.revision}，画布 ${doc.canvas.width}×${doc.canvas.height}，v${doc.version}）`);
+  if (isV3Scope) L.push(`读取范围：${scopeLabel}（原始语义；--variant <id> 可换其他变体）`);
   const lines = [];
-  treeLines(doc, 'root', '', lines);
+  treeLines(scope, 'root', '', lines);
   L.push(...lines);
   if (compId) {
-    const c = P.findComponent(doc, compId);
-    L.push(`\n■ 组件 ${compId} 完整定义`);
+    const c = P.findComponent(scope, compId);
+    L.push(`\n■ 组件 ${compId} 完整定义（${scopeLabel}）`);
     L.push(JSON.stringify(c, null, 2));
   }
   out({ ok: true }, L.join('\n'));
@@ -302,19 +325,30 @@ async function validate() {
   const { file, doc } = resolveProject(arg);
   const staticReport = validateDoc(doc);
   let measureReport = null;
+  let measureScope = null;
   if (flags.snapshot) {
     let snap;
     try { snap = JSON.parse(fs.readFileSync(flags.snapshot, 'utf8')); }
     catch (e) { fail('E_SNAPSHOT_FILE', `快照文件读取失败：${e.message}`); }
-    measureReport = checkSnapshot(doc, snap);
+    // 实测对照在「指定变体的呈现方案组件树」上进行（S1 B03）；v1/v2 即文档本体
+    const wantedVariant = flags.variant || doc.activeVariant;
+    try { measureScope = editScopeOf(doc, wantedVariant); }
+    catch (e) {
+      fail(e.code || 'E_VARIANT_UNKNOWN', e.message + '（实测校验需要定位到具体变体；--variant <id> 可指定）',
+        { variantId: wantedVariant == null ? null : String(wantedVariant) });
+    }
+    measureReport = checkSnapshot(measureScope, snap);
   }
   const errors = [...staticReport.errors, ...(measureReport ? measureReport.errors : [])];
   const warnings = [...staticReport.warnings, ...(measureReport ? measureReport.warnings : [])];
   const ok = errors.length === 0;
-  out({ ok, file, revision: doc.revision, errors, warnings, checked: { static: true, snapshot: !!flags.snapshot } },
+  out({ ok, file, revision: doc.revision,
+      variant: measureScope && measureScope !== doc ? measureScope.__variantId : undefined,
+      presentation: measureScope && measureScope !== doc ? measureScope.__presentationId : undefined,
+      errors, warnings, checked: { static: true, snapshot: !!flags.snapshot } },
     `${ok ? '✓' : '✗'} ${file}（修订号 ${doc.revision}）\n` +
     `  结构检查：${staticReport.errors.length} 错误 / ${staticReport.warnings.length} 警告` +
-    (measureReport ? `\n  实测检查：${measureReport.errors.length} 错误 / ${measureReport.warnings.length} 警告` : '') +
+    (measureReport ? `\n  实测检查：${measureReport.errors.length} 错误 / ${measureReport.warnings.length} 警告（范围：${measureScope !== doc ? `变体 "${measureScope.__variantId}" → 呈现方案 "${measureScope.__presentationId}"` : '文档组件表'}）` : '') +
     (errors.length ? '\n  错误：\n' + errors.map((e) => `    [${e.code}] ${e.message}`).join('\n') : '') +
     (warnings.length ? '\n  警告：\n' + warnings.map((w) => `    [${w.code}] ${w.message}`).join('\n') : ''));
   process.exit(ok ? 0 : 1);
@@ -349,12 +383,8 @@ async function exportProj() {
   const ts = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
-  const dir = flags.out ? path.resolve(flags.out) : path.join(EXPORTS_DIR, `${baseName}_cli_rev${doc.revision}_${stamp}`);
-  await fsp.mkdir(dir, { recursive: true });
 
-  const files = [];
-  await fsp.writeFile(path.join(dir, 'design.uidoc.json'), JSON.stringify(doc, null, 2), 'utf8'); files.push('design.uidoc.json');
-
+  // 先构建全部产物字符串（读不到渲染器/协议库/解析器/运行时就明确报错，不创建任何文件）
   let rendererSource, protocolSource, resolveSource, runtimeSource, h2cSource = '';
   try { rendererSource = await fsp.readFile(path.join(ROOT, 'shared', 'renderer.js'), 'utf8'); }
   catch (e) { fail('E_EXPORT', '读取渲染器失败：' + e.message); }
@@ -366,11 +396,11 @@ async function exportProj() {
   try { runtimeSource = await fsp.readFile(path.join(ROOT, 'shared', 'runtime.js'), 'utf8'); }
   catch (e) { fail('E_EXPORT', '读取交互运行时（shared/runtime.js）失败：' + e.message); }
   try { h2cSource = await fsp.readFile(path.join(ROOT, 'vendor', 'html2canvas.min.js'), 'utf8'); } catch { /* 可选 */ }
-  await fsp.writeFile(path.join(dir, 'preview.html'),
-    buildPreviewHtml({ doc, protocolSource, resolveSource, runtimeSource, rendererSource, html2canvasSource: h2cSource, variantId }), 'utf8');
-  files.push('preview.html');
-
-  await fsp.writeFile(path.join(dir, '使用说明.txt'), [
+  const html = buildPreviewHtml({ doc, protocolSource, resolveSource, runtimeSource, rendererSource, html2canvasSource: h2cSource, variantId });
+  const report = { generatedAt: ts.toISOString(), tool: 'canvasloom-cli', static: staticReport,
+    errors: staticReport.errors, warnings: staticReport.warnings };
+  if (effectiveVariant) report.variant = effectiveVariant; // v3：记录本次导出实际渲染的变体
+  const readme = [
     'CanvasLoom 导出包（CLI）',
     '',
     '· design.uidoc.json  设计文件（UIDoc v' + P.DOC_VERSION + '，修订号 ' + doc.revision + '）',
@@ -382,14 +412,31 @@ async function exportProj() {
     '· report.json        结构检查报告（静态校验结果' + (effectiveVariant ? '，含本次渲染的变体' : '') + '）',
     '',
     '如需包含实测快照与截图的一键导出，请在编辑器中点"导出"。',
-  ].filter(Boolean).join('\n'), 'utf8');
-  files.push('使用说明.txt');
+  ].filter(Boolean).join('\n');
 
-  const staticReport2 = staticReport; // 已在函数开头完成校验
-  const report = { generatedAt: ts.toISOString(), tool: 'canvasloom-cli', static: staticReport2,
-    errors: staticReport2.errors, warnings: staticReport2.warnings };
-  if (effectiveVariant) report.variant = effectiveVariant; // v3：记录本次导出实际渲染的变体
-  await fsp.writeFile(path.join(dir, 'report.json'), JSON.stringify(report, null, 2), 'utf8'); files.push('report.json');
+  let dir;
+  let files;
+  if (flags.out) {
+    // 显式 --out：按调用方指定的目录写入（目录已存在时合并写入，保持既有脚本语义）
+    dir = path.resolve(flags.out);
+    await fsp.mkdir(dir, { recursive: true });
+    files = [];
+    await fsp.writeFile(path.join(dir, 'design.uidoc.json'), JSON.stringify(doc, null, 2), 'utf8'); files.push('design.uidoc.json');
+    await fsp.writeFile(path.join(dir, 'preview.html'), html, 'utf8'); files.push('preview.html');
+    await fsp.writeFile(path.join(dir, '使用说明.txt'), readme, 'utf8'); files.push('使用说明.txt');
+    await fsp.writeFile(path.join(dir, 'report.json'), JSON.stringify(report, null, 2), 'utf8'); files.push('report.json');
+  } else {
+    // 默认导出目录（S1 B08）：唯一任务标识 + 临时目录 + 全部成功后原子发布。
+    // 同一秒的多次导出各得各的目录，绝不互相覆盖；中途失败清理临时目录。
+    const base = `${baseName}_cli_rev${doc.revision}_${stamp}_${exportTaskSuffix()}`;
+    dir = await publishExportDir(EXPORTS_DIR, base, async (tmp) => {
+      await fsp.writeFile(path.join(tmp, 'design.uidoc.json'), JSON.stringify(doc, null, 2), 'utf8');
+      await fsp.writeFile(path.join(tmp, 'preview.html'), html, 'utf8');
+      await fsp.writeFile(path.join(tmp, '使用说明.txt'), readme, 'utf8');
+      await fsp.writeFile(path.join(tmp, 'report.json'), JSON.stringify(report, null, 2), 'utf8');
+    });
+    files = ['design.uidoc.json', 'preview.html', '使用说明.txt', 'report.json'];
+  }
 
   out({ ok: true, dir, files, errors: report.errors.length, warnings: report.warnings.length, variant: effectiveVariant || undefined },
     `✓ 导出完成：${dir}\n  文件：${files.join('、')}\n` +

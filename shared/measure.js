@@ -42,19 +42,38 @@ const SIZE_TOL = 1.5;   // 尺寸/位置对照容差（px），吸收亚像素�
 
 // opts.pageIds（v3.1，可选）：页面图层容器 id 列表。实测快照把全部页面渲染在一起，
 // 但运行时它们是互斥显示的——不同页面之间（含页面与常驻层之间）的重叠不报告。
+// opts.hiddenIds（S1 B06，可选）：本次渲染中按运行时初始状态隐藏的组件 id
+// （初始收起面板 + 非当前页页面图层，含其子树）。隐藏组件不参与可见性结论、
+// 规则对照与重叠判定——它们在截图中不可见，报"尺寸不一致/不可见"都是误导。
 export function checkSnapshot(doc, snapshot, opts = {}) {
   const issues = [];
+  // v3 文档本体没有顶层 components：调用方必须先解析到具体呈现方案（editScopeOf）。
+  // 这里给出结构化错误而不是抛异常（S1 B03：CLI validate --snapshot 不再 E_CLI_CRASH）。
+  const comps = doc && doc.components && typeof doc.components === 'object' ? doc.components : null;
+  if (!comps) {
+    issue(issues, 'error', 'E_SNAPSHOT',
+      '文档缺少 components 组件表，无法对照实测数据（v3 文档请先解析到具体变体/呈现方案再校验）');
+    return pack(issues);
+  }
   const pageOwners = new Map(); // 组件id → 所属页面容器id（页面外组件无归属）
   for (const pid of (Array.isArray(opts.pageIds) ? opts.pageIds : [])) {
-    const pc = doc.components && doc.components[pid];
+    const pc = comps[pid];
     if (!pc) continue;
     const walk = (id) => {
       pageOwners.set(id, pid);
-      const cc = doc.components[id];
+      const cc = comps[id];
       if (cc && cc.children) cc.children.forEach(walk);
     };
     walk(pid);
   }
+  // 隐藏集合：hiddenIds 及其全部后代（隐藏容器内的组件一并跳过结论）
+  const hidden = new Set();
+  const addHiddenTree = (id) => {
+    if (hidden.has(id) || !comps[id]) return;
+    hidden.add(id);
+    (comps[id].children || []).forEach(addHiddenTree);
+  };
+  for (const id of (Array.isArray(opts.hiddenIds) ? opts.hiddenIds : [])) addHiddenTree(id);
 
   // ---------- 第 1 层：快照有效性门禁 ----------
   if (!snapshot || typeof snapshot !== 'object') {
@@ -85,7 +104,7 @@ export function checkSnapshot(doc, snapshot, opts = {}) {
 
   // 覆盖完整性：文档中每个组件都必须有实测数据
   const missing = [];
-  for (const comp of Object.values(doc.components)) {
+  for (const comp of Object.values(comps)) {
     if (!comp) continue;
     const m = M[comp.id];
     if (!m || typeof m !== 'object') missing.push(comp.id);
@@ -102,7 +121,7 @@ export function checkSnapshot(doc, snapshot, opts = {}) {
 
   // 坐标类型严格校验
   let coordBad = false;
-  for (const comp of Object.values(doc.components)) {
+  for (const comp of Object.values(comps)) {
     if (!comp) continue;
     const m = M[comp.id];
     if (!m || typeof m !== 'object') continue;
@@ -129,7 +148,7 @@ export function checkSnapshot(doc, snapshot, opts = {}) {
   // 允许溢出豁免的组件集合（含其子树）
   const exempt = new Set();
   const collectExempt = (id) => {
-    const c = doc.components[id];
+    const c = comps[id];
     if (!c) return;
     if (c.flags && c.flags.allowOverflow) {
       exempt.add(id);
@@ -140,11 +159,12 @@ export function checkSnapshot(doc, snapshot, opts = {}) {
   };
   collectExempt('root');
 
-  for (const comp of Object.values(doc.components)) {
+  for (const comp of Object.values(comps)) {
     if (!comp) continue;
     const m = M[comp.id];
     if (!m || typeof m !== 'object') continue;
     if (coordBad && (typeof m.x !== 'number' || typeof m.width !== 'number')) continue;
+    if (hidden.has(comp.id)) continue; // 隐藏子树：不参与可见性/规则/越界/溢出结论（S1 B06）
     if (!m.visible || m.width <= 0 || m.height <= 0) {
       issue(issues, 'warning', 'W_INVISIBLE', `组件 "${comp.id}" 在该视口下不可见或尺寸为 0（${m.width}×${m.height}）`, comp.id);
       continue;
@@ -216,6 +236,7 @@ export function checkSnapshot(doc, snapshot, opts = {}) {
       for (let j = i + 1; j < kids.length; j++) {
         const a = kids[i], b = kids[j];
         if (!isAbsolutePlacement(a.c, comp) && !isAbsolutePlacement(b.c, comp)) continue;
+        if (hidden.has(a.cid) || hidden.has(b.cid)) continue; // 隐藏组件不参与重叠结论
         if (!rectsIntersect(a.m, b.m, 2)) continue;
         // v3.1 页面豁免：归属不同页面（或一方在页面外）的重叠不判——页面互斥显示
         if (pageOwners.get(a.cid) !== pageOwners.get(b.cid)) continue;

@@ -17,7 +17,8 @@ import { UI_MODES, DEFAULT_MODE } from '../shared/modes.js';
 import { buildPreviewHtml } from '../shared/export-html.js';
 import { withFileLock, lockFileFor } from '../shared/filelock.js';
 import { backupV1BeforeWrite } from '../shared/backup.js';
-import { inspectDocVersion, isSupportedVersion, CompatError } from '../shared/compat.js';
+import { publishExportDir, exportTaskSuffix } from '../shared/exportdir.js';
+import { inspectDocVersion, isSupportedVersion, SUPPORTED_VERSIONS, CompatError } from '../shared/compat.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
@@ -151,7 +152,10 @@ async function handleApi(req, res, url) {
       try {
         const st = await fs.stat(path.join(PROJECTS_DIR, f));
         const doc = JSON.parse(await fs.readFile(path.join(PROJECTS_DIR, f), 'utf8'));
-        list.push({ name: doc.name || f.replace(/\.uidoc\.json$/, ''), file: f, revision: doc.revision, updatedAt: st.mtime.toISOString() });
+        // 项目稳定身份 = 文件名（去掉扩展名）；doc.name 只是展示名，可被 CLI 独立修改。
+        // 打开/保存/事件通知一律用稳定身份（S1 B07），展示名仅供界面显示。
+        const id = f.slice(0, -'.uidoc.json'.length);
+        list.push({ id, name: doc.name || id, file: f, revision: doc.revision, updatedAt: st.mtime.toISOString() });
       } catch { /* 跳过损坏文件 */ }
     }
     list.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
@@ -210,7 +214,7 @@ async function handleApi(req, res, url) {
     const doc = body.doc;
     if (!doc || doc.format !== 'uidoc') return badRequest(res, 'doc 不是有效的 UIDoc 文档');
     if (!isSupportedVersion(doc.version)) {
-      return send(res, 422, { ok: false, error: `不支持的文档版本：${JSON.stringify(doc.version)}（支持 1 与 2），未保存` });
+      return send(res, 422, { ok: false, error: `不支持的文档版本：${JSON.stringify(doc.version)}（支持 ${SUPPORTED_VERSIONS.join('、')}），未保存` });
     }
     const base = body.baseRevision;
     if (!Number.isInteger(base)) return badRequest(res, '缺少 baseRevision');
@@ -280,21 +284,28 @@ async function handleApi(req, res, url) {
     const ts = new Date();
     const pad = (n) => String(n).padStart(2, '0');
     const stamp = `${ts.getFullYear()}${pad(ts.getMonth() + 1)}${pad(ts.getDate())}-${pad(ts.getHours())}${pad(ts.getMinutes())}${pad(ts.getSeconds())}`;
-    const dir = path.join(EXPORTS_DIR, `${name}_rev${doc.revision}_${stamp}`);
-    await fs.mkdir(dir, { recursive: true });
-    const files = [];
-    await fs.writeFile(path.join(dir, 'design.uidoc.json'), JSON.stringify(doc, null, 2), 'utf8'); files.push('design.uidoc.json');
-    if (body.snapshot) { await fs.writeFile(path.join(dir, 'snapshot.json'), JSON.stringify(body.snapshot, null, 2), 'utf8'); files.push('snapshot.json'); }
-    if (body.report) { await fs.writeFile(path.join(dir, 'report.json'), JSON.stringify(body.report, null, 2), 'utf8'); files.push('report.json'); }
+    // 先构建全部产物内容（读不到源码就明确报错），再经临时目录一次性发布（S1 B08）：
+    // 目录名带唯一任务后缀 + 原子重命名——同一秒的多次导出各得各的目录，绝不互相覆盖；
+    // 中途失败清理临时目录，不留下半成品导出包。
     const html = buildPreviewHtml({
       doc, modesSource: await loadModesSource(), protocolSource: await loadProtocolSource(),
       resolveSource: await loadResolveSource(), runtimeSource: await loadRuntimeSource(),
       rendererSource: await loadRendererSource(), html2canvasSource: await loadHtml2Canvas(),
     });
-    await fs.writeFile(path.join(dir, 'preview.html'), html, 'utf8'); files.push('preview.html');
-    if (body.screenshot) {
-      const img = dataUrlToBuffer(body.screenshot);
-      if (img) { await fs.writeFile(path.join(dir, 'screenshot.' + img.ext), img.buf); files.push('screenshot.' + img.ext); }
+    const img = body.screenshot ? dataUrlToBuffer(body.screenshot) : null;
+    const base = `${name}_rev${doc.revision}_${stamp}_${exportTaskSuffix()}`;
+    let dir;
+    let files = [];
+    try {
+      dir = await publishExportDir(EXPORTS_DIR, base, async (tmp) => {
+        await fs.writeFile(path.join(tmp, 'design.uidoc.json'), JSON.stringify(doc, null, 2), 'utf8'); files.push('design.uidoc.json');
+        if (body.snapshot) { await fs.writeFile(path.join(tmp, 'snapshot.json'), JSON.stringify(body.snapshot, null, 2), 'utf8'); files.push('snapshot.json'); }
+        if (body.report) { await fs.writeFile(path.join(tmp, 'report.json'), JSON.stringify(body.report, null, 2), 'utf8'); files.push('report.json'); }
+        await fs.writeFile(path.join(tmp, 'preview.html'), html, 'utf8'); files.push('preview.html');
+        if (img) { await fs.writeFile(path.join(tmp, 'screenshot.' + img.ext), img.buf); files.push('screenshot.' + img.ext); }
+      });
+    } catch (e) {
+      return send(res, 500, { ok: false, error: '导出失败（未产生不完整目录）：' + e.message });
     }
     broadcast({ type: 'exported', dir });
     return send(res, 200, { ok: true, dir, files });

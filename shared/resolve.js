@@ -230,3 +230,41 @@ export function resolveVariant(doc, variantId) {
     components: comps,
   };
 }
+
+// ---------- 编辑域视图（S1 B03）----------
+// v3 文档 → 指定变体指向的 presentation 组件树（与浏览器端 store.scopeOf 同语义）。
+// 供 CLI inspect/validate 读取 v3 原始语义：组件树、featureId/bind/actions 等
+// 全部保留（不是解析视图），用于读取与实测校验。返回浅拷贝视图——components
+// 指向原 presentation 表，不深拷贝、不修改输入；v1/v2 文档原样返回。
+// 变体/呈现方案不存在时抛 ResolveError（E_VARIANT_UNKNOWN），绝不回退默认。
+export function editScopeOf(doc, variantId) {
+  if (!isPlainObject(doc)) {
+    fail({ code: 'E_DOC_INVALID', message: 'editScopeOf：文档不是有效的 JSON 对象' });
+  }
+  if (doc.version !== 3) return doc;
+  const variants = Array.isArray(doc.variants) ? doc.variants : null;
+  const variant = variants ? variants.find((v) => isPlainObject(v) && v.id === variantId) : null;
+  if (!variant) {
+    fail({
+      code: 'E_VARIANT_UNKNOWN',
+      message: `变体 ${JSON.stringify(variantId == null ? null : String(variantId))} 不存在于 variants` +
+        `（可用：${variants ? variants.map((v) => (isPlainObject(v) ? String(v.id) : '?')).join('、') : '文档缺少 variants 变体清单'}）`,
+      variantId: variantId == null ? null : String(variantId),
+    });
+  }
+  const presentations = isPlainObject(doc.presentations) ? doc.presentations : null;
+  const pres = presentations ? presentations[variant.presentation] : null;
+  if (!isPlainObject(pres) || !isPlainObject(pres.components) || !pres.components.root) {
+    fail({
+      code: 'E_VARIANT_UNKNOWN',
+      message: `变体 "${variant.id}" 引用的呈现方案 ${JSON.stringify(variant.presentation)} 不存在或缺少可用组件树（components.root）`,
+      variantId: variant.id,
+      field: 'presentation',
+    });
+  }
+  return Object.assign({}, doc, {
+    components: pres.components,
+    __presentationId: variant.presentation,
+    __variantId: variant.id,
+  });
+}

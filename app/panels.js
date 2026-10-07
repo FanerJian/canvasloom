@@ -15,6 +15,7 @@ import { instantiateBlock } from '../shared/blocks.js';
 import { validateDoc } from '../shared/validate.js';
 import { designRectById, positionPreservingVisual } from './design-geometry.js';
 import { remapComponentRefs, cleanupDeletedRefs } from './v3edit.js';
+import { collectCopySnapshot, pasteSnapshotIntoDoc, duplicateSubtree, adaptChildToTargetLayout } from '../shared/clipboard.js';
 
 const svgWrap = (inner) => `<svg viewBox="0 0 24 24">${inner}</svg>`;
 const TYPE_ICONS = {
@@ -669,36 +670,25 @@ export function deleteComponent(id) {
 }
 
 // 创建副本（供右键菜单与 Ctrl+D 使用）
+// S1 B05：先建立整棵子树的完整 ID 映射，再克隆并重映射全部内部引用——
+// 子树里按钮先于目标面板出现时，副本按钮也能正确指向副本面板（历史缺陷：
+// 边克隆边映射，尚未克隆到的目标映射缺失，按钮仍操作原面板）。
 export function duplicateComponent(id) {
   const src = findComponent(viewDoc(), id);
   if (!src || id === 'root') return;
   const parentId = src.parent || 'root';
+  let newId = null;
   mutate(`创建副本 ${id}`, (doc) => {
-    const idMap = {};
-    const copyOne = (sid, pid) => {
-      const s = doc.components[sid];
-      if (!s) return null;
-      const nid = genId(doc, sid + '_copy');
-      idMap[sid] = nid;
-      const copy = JSON.parse(JSON.stringify(s));
-      copy.id = nid;
-      copy.parent = pid;
-      copy.name = (s.name || sid) + ' 副本';
-      // v3：副本内部的点击动作指向也换成副本内的对应组件（外部目标保持不变）
-      if (copy.actions && copy.actions.click && idMap[copy.actions.click.target]) {
-        copy.actions.click = { ...copy.actions.click, target: idMap[copy.actions.click.target] };
-      }
-      doc.components[nid] = copy;
-      if (isContainer(copy)) copy.children = (s.children || []).map((cid) => copyOne(cid, nid)).filter(Boolean);
-      return nid;
-    };
-    const nid = copyOne(id, parentId);
+    const r = duplicateSubtree(doc, id);
+    if (!r) return;
+    newId = r.newId;
     const parent = doc.components[parentId];
+    if (!parent) return;
     const i = parent.children.indexOf(id);
-    parent.children.splice(i + 1, 0, nid);
-    state.pendingSelect = nid;
+    parent.children.splice(i + 1, 0, r.newId);
+    state.pendingSelect = r.newId;
   });
-  toast(`已创建「${src.name}」的副本`);
+  if (newId) toast(`已创建「${src.name}」的副本`);
 }
 
 // ---- 尺寸行 ----
@@ -870,48 +860,7 @@ function resourceRow(comp) {
 }
 
 // ---- 容器布局节 ----
-// 旧排列布局是否在该轴上把 auto 尺寸拉伸显示：纵向排列的交叉轴（宽）/横向排列的交叉轴（高），
-// align 默认 stretch。这种 auto 不是内容宽度，转自由布局时不固化会视觉缩水。
-function axisStretchedByOldLayout(oldLayout, axis) {
-  if (!oldLayout || (oldLayout.mode !== 'vertical' && oldLayout.mode !== 'horizontal')) return false;
-  const cross = oldLayout.mode === 'vertical' ? 'width' : 'height';
-  return axis === cross && (oldLayout.align || 'stretch') === 'stretch';
-}
-
-// 把（mutate 克隆内的）子组件适配进目标容器布局；geo 为 DOM 实测几何快照（可缺失）。
-// 转自由布局：保持转换瞬间的真实视觉位置（含边框换算）；fill 轴与被旧布局拉伸的 auto 轴
-// 都按实测尺寸固化为 fixed；转网格：按顺序分配第一个空闲格，避免全部堆在 1,1。
-// CLI 无 DOM 时不走这里（见 validate.js opMove）。
-function adaptChildToTargetLayout(doc, child, target, geo, oldLayout) {
-  const toMode = target.layout.mode;
-  if (child.placement?.mode === 'absolute') {
-    child.position = (geo && geo.position) || child.position || { left: 24, top: 24 };
-    delete child.area;
-    for (const axis of ['width', 'height']) if (child.size[axis]?.mode === 'fill') {
-      const rendered = geo?.rect && Math.round(axis === 'width' ? geo.rect.w : geo.rect.h);
-      child.size[axis] = rendered ? { mode: 'fixed', value: rendered } : { mode: 'auto' };
-    }
-    return;
-  }
-  if (toMode === 'free') {
-    delete child.placement;
-    child.position = (geo && geo.position) || child.position || { left: 24, top: 24 };
-    for (const axis of ['width', 'height']) {
-      const s = child.size[axis];
-      if (!s) continue;
-      const rendered = (geo && geo.rect) ? Math.round(axis === 'width' ? geo.rect.w : geo.rect.h) : null;
-      if (s.mode === 'fill') {
-        child.size[axis] = rendered != null ? { mode: 'fixed', value: rendered } : { mode: 'auto' };
-      } else if (s.mode === 'auto' && rendered != null && axisStretchedByOldLayout(oldLayout, axis)) {
-        child.size[axis] = { mode: 'fixed', value: rendered };
-      }
-    }
-  } else {
-    delete child.position;
-    if (toMode === 'grid') child.area = firstFreeGridCell(target, doc);
-    else delete child.area;
-  }
-}
+// （布局适配 adaptChildToTargetLayout 已上移到 shared/clipboard.js 供粘贴/移动共用）
 
 // 布局切换（一次转换 = 一次撤销）：DOM 几何读取必须在 mutate 之前完成
 function switchLayoutPreserving(id, v) {
@@ -1266,92 +1215,37 @@ export function toast(msg, kind = 'info') {
 }
 
 // ================= 复制/粘贴 =================
-// 复制 = 完整子树快照 + 依赖资源快照：粘贴时从快照物化并生成全新 ID，
-// 复制后修改原件、删除原件、切换项目都不影响粘贴结果（A09）。
+// 复制（S1 B04）：从「原始编辑域」收集完整语义快照（v3 的 actions/bind/
+// featureId/$令牌引用全部保留），并带上资源、功能与令牌来源值等依赖。
+// 渲染解析视图只用于显示与测量——从它复制会丢语义（历史缺陷 B04）。
+// 粘贴时物化并按目标文档合并依赖（shared/clipboard.js）。
 export function copySelection() {
   const c = selectedComp();
   if (!c || c.id === 'root') return;
-  const view = viewDoc();
-  const tree = {};
-  const collect = (id) => {
-    const comp = findComponent(view, id);
-    if (!comp) return;
-    tree[id] = JSON.parse(JSON.stringify(comp));
-    if (isContainer(comp)) (comp.children || []).forEach(collect);
-  };
-  collect(c.id);
-  const resources = {};
-  for (const comp of Object.values(tree)) {
-    if (comp.type === 'image' && comp.resourceId && view.resources && view.resources[comp.resourceId]) {
-      resources[comp.resourceId] = JSON.parse(JSON.stringify(view.resources[comp.resourceId]));
-    }
-  }
-  state.clipboard = { tree, resources, rootId: c.id, name: c.name, copiedAt: Date.now() };
-  const n = Object.keys(tree).length;
-  toast(`已复制 "${c.name}"（${n} 个组件${Object.keys(resources).length ? `、${Object.keys(resources).length} 个图片资源` : ''}）`);
-}
-
-// 资源 id 去重：目标文档已占用该 id 且内容不同时生成新 id
-function genResourceId(doc, base) {
-  let id = base || 'res';
-  if (!doc.resources[id]) return id;
-  let i = 2;
-  while (doc.resources[id + '_' + i]) i++;
-  return id + '_' + i;
+  const clip = collectCopySnapshot(scopeOf(state.doc), c.id, { sourceProject: state.name });
+  if (!clip) return;
+  state.clipboard = clip;
+  renderToolbarState(); // 剪贴板变化立即刷新粘贴按钮（S1 B09）
+  const n = Object.keys(clip.tree).length;
+  const deps = [
+    Object.keys(clip.resources).length ? `${Object.keys(clip.resources).length} 个图片资源` : '',
+    Object.keys(clip.features).length ? `${Object.keys(clip.features).length} 个功能` : '',
+  ].filter(Boolean).join('、');
+  toast(`已复制 "${c.name}"（${n} 个组件${deps ? `、${deps}` : ''}）`);
 }
 
 export function pasteClipboard(targetParentId) {
   const clip = state.clipboard;
   if (!clip || !clip.tree || !clip.tree[clip.rootId]) return;
+  let result = null;
   mutate('粘贴组件', (doc) => {
-    const srcRoot = clip.tree[clip.rootId];
-    // 目标父容器：显式指定 > 来源父容器（仍存在且是容器）> 根
-    let parentId = 'root';
-    if (targetParentId && doc.components[targetParentId] && isContainer(doc.components[targetParentId])) {
-      parentId = targetParentId;
-    } else if (srcRoot.parent && doc.components[srcRoot.parent] && isContainer(doc.components[srcRoot.parent])) {
-      parentId = srcRoot.parent;
-    }
-    const target = doc.components[parentId];
-    // 资源合并：同 id 同内容 → 复用；同 id 异内容 → 新 id；缺失 → 补入
-    doc.resources = doc.resources || {};
-    const ridMap = {};
-    for (const [rid, res] of Object.entries(clip.resources || {})) {
-      if (doc.resources[rid]) {
-        if (JSON.stringify(doc.resources[rid]) === JSON.stringify(res)) { ridMap[rid] = rid; continue; }
-        const nid = genResourceId(doc, rid + '_copy');
-        doc.resources[nid] = JSON.parse(JSON.stringify(res));
-        ridMap[rid] = nid;
-      } else {
-        doc.resources[rid] = JSON.parse(JSON.stringify(res));
-        ridMap[rid] = rid;
-      }
-    }
-    // 子树物化：全新 ID + 引用重映射
-    const cloneOne = (srcId, pid) => {
-      const src = clip.tree[srcId];
-      if (!src) return null;
-      const nid = genId(doc, srcId + '_copy');
-      const copy = JSON.parse(JSON.stringify(src));
-      copy.id = nid;
-      copy.parent = pid;
-      copy.name = (src.name || srcId) + ' 副本';
-      if (copy.type === 'image' && copy.resourceId && ridMap[copy.resourceId] != null) {
-        copy.resourceId = ridMap[copy.resourceId];
-      }
-      doc.components[nid] = copy;
-      if (isContainer(copy)) {
-        copy.children = (src.children || []).map((cid) => cloneOne(cid, nid)).filter(Boolean);
-      }
-      return nid;
-    };
-    const nid = cloneOne(clip.rootId, parentId);
-    target.children = target.children || [];
-    target.children.push(nid);
-    // 布局适配：目标容器布局可能与来源不同（自由保持坐标，排列清坐标，网格分格）
-    adaptChildToTargetLayout(doc, doc.components[nid], target, null);
-    state.pendingSelect = nid;
+    result = pasteSnapshotIntoDoc(doc, clip, targetParentId, { currentProject: state.name });
+    if (result && !result.aborted && result.newId) state.pendingSelect = result.newId;
   });
+  for (const n of (result && result.notices) || []) toast(n.message, n.level === 'warn' ? 'warn' : 'info');
+  if (result && !result.aborted && (result.notices || []).some((n) => n.level === 'warn')) {
+    toast('粘贴完成，但有需要留意的依赖处理（见上方提示）', 'warn');
+  }
 }
 
 // ================= 历史按钮状态 =================
@@ -1362,7 +1256,12 @@ export function renderToolbarState() {
   set('btn-paste', !state.clipboard);
   set('btn-save', false);
   const nameEl = document.getElementById('proj-name');
-  if (nameEl) nameEl.textContent = state.name || '（未打开）';
+  if (nameEl) {
+    // 展示名（doc.name）与稳定身份（文件名 state.name）分离显示（S1 B07）：
+    // 展示名可被 CLI 独立修改，打开/保存一律走稳定身份，顶栏悬停可查文件名
+    nameEl.textContent = (state.doc && state.doc.name) || state.name || '（未打开）';
+    nameEl.title = state.name ? '项目文件：' + state.name : '';
+  }
   const dirtyEl = document.getElementById('proj-dirty');
   if (dirtyEl) dirtyEl.style.display = state.dirty ? '' : 'none';
   const revEl = document.getElementById('proj-rev');
